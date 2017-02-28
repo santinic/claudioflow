@@ -21,9 +21,9 @@ class Mnist(unittest.TestCase):
 
         train_set, valid_set, test_set = self.load_mnist_dataset()
 
-        # train_set = [train_set[0][0:100], train_set[1][0:100]]
+        # train_set = [train_set[0][0:1000], train_set[1][0:1000]]
 
-        model = SequentialModel(784, [
+        model = SequentialModel([
             LinearLayer(784, 10),
             SoftmaxLayer(),
         ])
@@ -32,7 +32,7 @@ class Mnist(unittest.TestCase):
             input_data=train_set[0],
             target_data=train_set[1],
             loss=NLL(),
-            epochs=10,
+            epochs=3,
             learning_rate=0.1,
             show_progress=True
         )

@@ -5,7 +5,7 @@ from numpy.linalg import norm
 from numpy.testing import assert_array_equal
 
 from main import LinearLayer, SequentialModel, SoftmaxLayer, SigmoidLayer, SignLayer, SquaredLoss, ReluLayer, NLL, \
-    PrintLayer
+    PrintLayer, TanhLayer
 import numerical_gradient
 
 
@@ -26,7 +26,7 @@ class LinearLayerTests(unittest.TestCase):
 
         dJdy = np.array([3])
         dxdy = layer.backward(dJdy)
-        assert_array_equal(dxdy, [[3., 3.]])
+        assert_array_equal(dxdy, [3., 3.])
 
     def test_OneNeuronUpdate(self):
         layer = LinearLayer(2, 1, initialize='ones')
@@ -36,7 +36,7 @@ class LinearLayerTests(unittest.TestCase):
 
         dJdy = np.array([3])
         dxdy = layer.backward(dJdy)
-        assert_array_equal(dxdy, [[3., 3.]])
+        assert_array_equal(dxdy, [3., 3.])
 
         layer.update(dJdy)
         assert_array_equal(layer.W, np.array([[4, 7, 7]]))
@@ -52,16 +52,17 @@ class LinearLayerTests(unittest.TestCase):
         x = np.random.rand(2)
         y = layer.forward(x)
         deriv_grad = layer.backward(np.ones(1))
-        self.assertTrue(numerical_gradient.check(deriv_grad, layer.forward, x))
+        numgrad = numerical_gradient.calc(layer.forward, x)
+        self.assertTrue(numerical_gradient.are_similar(deriv_grad, numgrad[0]))
 
     def test_TwoNeuronsGradient(self):
         layer = LinearLayer(3, 2)
         x = np.random.rand(3)
         y = layer.forward(x)
         deriv_grad = layer.backward(np.ones(2))
-        # TODO: to make this test pass just sum column-wise
-        self.assertTrue(numerical_gradient.check(deriv_grad, layer.forward, x))
-
+        numgrad = numerical_gradient.calc(layer.forward, x)
+        numgrad = np.sum(numgrad, axis=0)
+        self.assertTrue(numerical_gradient.are_similar(deriv_grad, numgrad))
 
 class SigmoidLayerTests(unittest.TestCase):
 
@@ -89,7 +90,7 @@ class SigmoidLayerTests(unittest.TestCase):
 class TwoLinearLayersTests(unittest.TestCase):
 
     def test_Expand(self):
-        model = SequentialModel(2, [
+        model = SequentialModel([
             LinearLayer(2, 3, initialize='ones'),
             LinearLayer(3, 1, initialize='ones')
         ])
@@ -98,7 +99,7 @@ class TwoLinearLayersTests(unittest.TestCase):
         back = model.backward(np.array(1.))
 
     def test_Reduce(self):
-        model = SequentialModel(3, [
+        model = SequentialModel([
             LinearLayer(3, 2, initialize='ones'),
             LinearLayer(2, 2, initialize='ones')
         ])
@@ -107,7 +108,7 @@ class TwoLinearLayersTests(unittest.TestCase):
         model.backward(np.array([1., 1.]))
 
     def test_ManyErrors(self):
-        model = SequentialModel(2, [
+        model = SequentialModel([
             LinearLayer(2, 3, initialize='ones'),
             LinearLayer(3, 1, initialize='ones')
         ])
@@ -119,15 +120,20 @@ class TwoLinearLayersTests(unittest.TestCase):
 
 class SequentialModelTests(unittest.TestCase):
 
+    def test_wrong_input(self):
+        model = SequentialModel([
+
+        ])
+
     def test_Linear(self):
-        model = SequentialModel(input_size=2)
+        model = SequentialModel()
         model.add(LinearLayer(2, 1, initialize='ones'))
         data = np.array([2., 2.])
         y = model.forward(data)
         self.assertEqual(y, np.array([5]))
 
     def test_LinearSoftmax(self):
-        model = SequentialModel(input_size=2)
+        model = SequentialModel()
         model.add(LinearLayer(2, 1))
         model.add(SoftmaxLayer())
         data = np.array([2., 3.])
@@ -135,7 +141,7 @@ class SequentialModelTests(unittest.TestCase):
         self.assertEqual(out, 1.)
 
     def test_LinearSigmoid(self):
-        model = SequentialModel(input_size=2)
+        model = SequentialModel()
         model.add(LinearLayer(2, 1, initialize='ones'))
         model.add(SigmoidLayer())
         data = np.array([2., 3.])
@@ -143,57 +149,93 @@ class SequentialModelTests(unittest.TestCase):
         self.assertEqual(round(out,2), 1.)
 
     def test_trainLinearSigmoid(self):
-        model = SequentialModel(input_size=2)
+        model = SequentialModel()
         model.add(LinearLayer(2, 1, initialize='ones'))
         model.add(SigmoidLayer())
         data = np.array([2., 3.])
         out = model.forward(data)
         self.assertEqual(round(out,2), 1.)
 
-    def test_TwoLinearLayers(selfs):
-        x = np.ones(2)
-        model = SequentialModel(2, [
-            PrintLayer('Input:'),
-            LinearLayer(2, 3, initialize='random'),
-            PrintLayer('L1'),
-            LinearLayer(3, 2, initialize='random'),
-            PrintLayer('L2'),
-            SigmoidLayer(),
-            PrintLayer('SIG'),
-        ])
-        y = model.forward(x)
-
-        print('====')
-
-        model.backward(np.array([1, 1]))
-
-
-
     def test_LinearLayerNumericalGradientCheck(self):
         x = np.random.rand(3)
 
-        model = SequentialModel(3)
+        model = SequentialModel()
         model.add(LinearLayer(3, 2, initialize='ones'))
 
         num_grad = numerical_gradient.calc(model.forward, x)
         deriv_grad = model.backward(np.array([1, 1]))
-        # TODO: to make this test pass sum column-wise
+        num_grad = np.sum(num_grad, axis=0)
+
         self.assertTrue(numerical_gradient.are_similar(deriv_grad, num_grad))
 
-    # def test_ForwardPerceptronNumericalGradientCheck(self):
-    #     # x = np.random.rand(2)
-    #     x = np.array([-7., -7.])
-    #
-    #     model = SequentialModel(2)
-    #     model.add(LinearLayer(2, 1, initialize='ones'))
-    #     model.add(SigmoidLayer())
-    #
-    #     y = model.forward(x)
-    #     print(y)
-    #
-    #     num_grad = numerical_gradient.calc(model.forward, x)
-    #     deriv_grad = model.backward(np.array(1.))
-    #     self.assertTrue(numerical_gradient.are_similar(deriv_grad, num_grad))
+    def test_TwoLinearSigmoidLayers(self):
+        x = np.random.rand(5)
+
+        real_model = SequentialModel([
+            LinearLayer(5, 3, initialize='ones'),
+            SigmoidLayer(),
+            LinearLayer(3, 5, initialize='ones'),
+            SigmoidLayer()
+        ])
+        y = real_model.forward(x)
+        real_grad = real_model.backward(np.ones(5))
+
+
+        num_model = SequentialModel([
+            LinearLayer(5, 3, initialize='ones'),
+            SigmoidLayer(),
+            LinearLayer(3, 5, initialize='ones'),
+            SigmoidLayer()
+        ])
+        num_grad = numerical_gradient.calc(num_model.forward, x)
+
+        num_grad = np.sum(num_grad, axis=1)
+        self.assertTrue(numerical_gradient.are_similar(real_grad, num_grad))
+
+    def test_TwoDifferentModelsShouldHaveDifferentGradients(self):
+        x = np.random.rand(5)
+
+        real_model = SequentialModel([
+            LinearLayer(5, 3, initialize='ones'),
+            TanhLayer(),
+            LinearLayer(3, 5, initialize='ones'),
+            TanhLayer()
+        ])
+        y = real_model.forward(x)
+        real_grad = real_model.backward(np.ones(5))
+
+        num_model = SequentialModel([
+            LinearLayer(5, 3, initialize='ones'),
+            ReluLayer(),
+            LinearLayer(3, 5, initialize='ones'),
+            ReluLayer()
+        ])
+        num_grad = numerical_gradient.calc(num_model.forward, x)
+        num_grad = np.sum(num_grad, axis=1)
+        self.assertFalse(numerical_gradient.are_similar(real_grad, num_grad))
+
+    def test_TwoLinearLayersTanh(self):
+        x = np.random.rand(5)
+
+        real_model = SequentialModel([
+            LinearLayer(5, 3, initialize='ones'),
+            TanhLayer(),
+            LinearLayer(3, 5, initialize='ones'),
+            TanhLayer()
+        ])
+        y = real_model.forward(x)
+        real_grad = real_model.backward(np.ones(5))
+
+        num_model = SequentialModel([
+            LinearLayer(5, 3, initialize='ones'),
+            TanhLayer(),
+            LinearLayer(3, 5, initialize='ones'),
+            TanhLayer()
+        ])
+        num_grad = numerical_gradient.calc(num_model.forward, x)
+
+        num_grad = np.sum(num_grad, axis=1)
+        self.assertTrue(numerical_gradient.are_similar(real_grad, num_grad))
 
 
 class ReluLayerTest(unittest.TestCase):
@@ -262,6 +304,6 @@ class NLLGradientTest(unittest.TestCase):
         def loss_with_target(x):
             return nll.calc_loss(x, t)
 
-        numgrad = numerical_gradient.calc(loss_with_target, y)
-        self.assertTrue(numerical_gradient.are_similar(grad, numgrad))
+        num_grad = numerical_gradient.calc(loss_with_target, y)
+        self.assertTrue(numerical_gradient.are_similar(grad, num_grad))
 

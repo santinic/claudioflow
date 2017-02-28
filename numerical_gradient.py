@@ -44,12 +44,12 @@ def are_similar(deriv_grad, num_grad):
         "num_grad: \n%s\n" % num_grad + \
         "deriv_grad: \n%s\n" % deriv_grad
 
-    bools = (deriv_grad - num_grad) < 1e-8
+    bools = np.abs(deriv_grad - num_grad) < 1e-8
     similar = np.sum(bools) == bools.size
 
     if not similar:
-        raise Exception("Numerical and Derivated gradients are not similar.\n"+
-                        "deriv_grad: \n%s\n num_grad: \n%s\n" % (deriv_grad, num_grad))
+        print("Numerical and Derivated gradients are not similar.\n"+
+              "deriv_grad: \n%s\n num_grad: \n%s\n" % (deriv_grad, num_grad))
 
     return similar
 
