@@ -1,18 +1,18 @@
 import unittest
 from itertools import izip
 
-import numpy as np
 import matplotlib.pyplot as plt
-import time
-
-from main import SequentialModel, LinearLayer, SignLayer, SquaredLoss, PrintLayer, SigmoidLayer, ReluLayer, TanhLayer, \
-    DropoutLayer
-
 from sklearn import datasets
 
+from layers import LinearLayer, SigmoidLayer
+from loss import SquaredLoss
+from optim import RMSProp, AdaGrad, MomentumSGD, SGD
+from sequential import SequentialModel
+
 OUTPUT_A = 1.
-OUTPUT_B = -1.
-MIDDLE = 0
+OUTPUT_B = 0.
+MIDDLE = 0.5
+
 
 def gen_data():
     n = 100
@@ -22,13 +22,16 @@ def gen_data():
     #     n_samples=n, n_features=2, n_informative=2, n_redundant=0, n_classes=2, class_sep=2.0, n_clusters_per_class=1)
 
     # Circles:
-    data, targets = datasets.make_circles(
-        n_samples=n, shuffle=True, noise=0.05, random_state=None, factor=0.1)
+    # data, targets = datasets.make_circles(
+    #     n_samples=n, shuffle=True, noise=0.05, random_state=None, factor=0.1)
 
-    train_data, test_data = data[:n/2], data[n/2:]
-    train_targets, test_targets = targets[:n/2], targets[n/2:]
+    # Moons:
+    data, targets = datasets.make_moons(n_samples=n, shuffle=True, noise=0.05)
 
-    # Change targets to arbitrary balues
+    train_data, test_data = data[:n / 2], data[n / 2:]
+    train_targets, test_targets = targets[:n / 2], targets[n / 2:]
+
+    # Change targets to arbitrary values
     train_targets = [OUTPUT_A if t == 1 else OUTPUT_B for t in train_targets]
     test_targets = [OUTPUT_A if t == 1 else OUTPUT_B for t in test_targets]
 
@@ -56,20 +59,42 @@ def scatter_test_data(data, target, model):
 
 
 class Perceptron(unittest.TestCase):
-
     def test_Perceptron(self):
-
         train_data, train_targets, test_data, test_targets = gen_data()
 
         model = SequentialModel([
-            LinearLayer(2, 20, initialize='random'),
-            TanhLayer(),
-            DropoutLayer(0.2),
-            LinearLayer(20, 1, initialize='random'),
-            TanhLayer(),
+            LinearLayer(2, 5, initialize='random'),
+            SigmoidLayer(),
+            LinearLayer(5, 1, initialize='random'),
+            SigmoidLayer(),
         ])
 
-        model.learn(train_data, train_targets, loss=SquaredLoss(), learning_rate=0.1, epochs=1000)
+        # model.learn(input_data=train_data,
+        #             target_data=train_targets,
+        #             loss=SquaredLoss(),
+        #
+        #             # optimizer=SGD(learning_rate=0.1),
+        #             # optimizer=MomentumSGD(learning_rate=0.1, momentum=0.9),
+        #             # optimizer=AdaGrad(learning_rate=0.9),
+        #             optimizer=RMSProp(learning_rate=0.1, decay_rate=0.9),
+        #
+        #             epochs=200,
+        #             save_progress=True)
+
+        model.learn_minibatch(
+            input_data=train_data,
+            target_data=train_targets,
+            loss=SquaredLoss(),
+            batch_size=5,
+            # optimizer=SGD(learning_rate=0.1),
+            # optimizer=MomentumSGD(learning_rate=0.1, momentum=0.9),
+            optimizer=AdaGrad(learning_rate=0.9),
+            # optimizer=RMSProp(learning_rate=0.1, decay_rate=0.9),
+
+            epochs=3000,
+            save_progress=True)
+
+        model.save_to_file('perceptron.pkl')
 
         scatter_test_data(test_data, test_targets, model)
 

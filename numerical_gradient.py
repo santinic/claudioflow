@@ -23,8 +23,7 @@ def calc(f, x):
         # Put the original value back
         x[i] = x_i
 
-        numerical_grad_i = np.divide((f_x_plus_eps - f_x_minus_eps), (2.*eps))
-
+        numerical_grad_i = np.divide((f_x_plus_eps - f_x_minus_eps), (2. * eps))
         numerical_grad_vector.append(numerical_grad_i)
 
     return np.array(numerical_grad_vector).T
@@ -39,24 +38,22 @@ def are_similar(deriv_grad, num_grad):
     assert deriv_grad is not None
     assert num_grad is not None
     assert np.array_equal(num_grad.shape, deriv_grad.shape), \
-        "Numerical and Derivated gradients dimen" \
-        "sions don't match:\n" + \
+        "Numerical and Derivated gradients dimensions don't match:\n" + \
         "num_grad: \n%s\n" % num_grad + \
         "deriv_grad: \n%s\n" % deriv_grad
 
     bools = np.abs(deriv_grad - num_grad) < 1e-8
     similar = np.sum(bools) == bools.size
 
-    if not similar:
-        print("Numerical and Derivated gradients are not similar.\n"+
-              "deriv_grad: \n%s\n num_grad: \n%s\n" % (deriv_grad, num_grad))
-
     return similar
+
+
+def assert_are_similar(deriv_grad, num_grad):
+    if not are_similar(deriv_grad, num_grad):
+        raise Exception("Numerical and Derivated gradients are not similar.\n" +
+                        "deriv_grad: \n%s\n num_grad: \n%s\n" % (deriv_grad, num_grad))
 
 
 def check(deriv_grad, f, x):
     num_grad = calc(f, x)
     return are_similar(deriv_grad, num_grad)
-
-
-

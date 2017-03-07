@@ -1,8 +1,12 @@
 import numpy as np
 
+"""
+Optimization methods implemented as described here:
+http://www.deeplearningbook.org/contents/optimization.html
+"""
+
 
 class SGD:
-
     def __init__(self, learning_rate):
         self.learning_rate = learning_rate
 
@@ -11,7 +15,6 @@ class SGD:
 
 
 class MomentumSGD:
-
     def __init__(self, learning_rate, momentum):
         self.learning_rate = learning_rate
         self.momentum = momentum
@@ -24,10 +27,9 @@ class MomentumSGD:
 
 
 class AdaGrad:
-
     def __init__(self, learning_rate):
         self.learning_rate = learning_rate
-        self.delta_const = 10**-7
+        self.delta_const = 10 ** -7
 
     def update(self, layer, grad):
         if not hasattr(layer, 'r'):
@@ -38,11 +40,10 @@ class AdaGrad:
 
 
 class RMSProp:
-
     def __init__(self, learning_rate, decay_rate):
         self.learning_rate = learning_rate
         self.decay_rate = decay_rate
-        self.delta_const = 10**-6
+        self.delta_const = 10 ** -6
 
     def update(self, layer, grad):
         if not hasattr(layer, 'r'):
@@ -51,5 +52,3 @@ class RMSProp:
         layer.r = (self.decay_rate * layer.r) + (1. - self.decay_rate) * squared_grad
         left = - self.learning_rate / np.sqrt(self.delta_const + layer.r)
         layer.W += np.multiply(left, grad)
-
-
