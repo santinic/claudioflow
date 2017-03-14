@@ -91,7 +91,7 @@ class Perceptron(unittest.TestCase):
             optimizer=AdaGrad(learning_rate=0.9),
             # optimizer=RMSProp(learning_rate=0.1, decay_rate=0.9),
 
-            epochs=3000,
+            epochs=100,
             save_progress=True)
 
         model.save_to_file('perceptron.pkl')

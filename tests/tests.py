@@ -1,11 +1,11 @@
 import unittest
 
 import numpy as np
-from numpy.testing import assert_array_equal
+from numpy.testing import assert_array_equal, assert_almost_equal
 
 from layers import LinearLayer, SoftmaxLayer, SigmoidLayer, SignLayer, ReluLayer, TanhLayer
 import numerical_gradient
-from loss import NLL, SoftmaxNLL
+from loss import NLL, CrossEntropyLoss, ClaudioMaxNLL
 from sequential import SequentialModel
 
 
@@ -152,7 +152,7 @@ class SequentialModelTests(unittest.TestCase):
         model.add(LinearLayer(3, 2, initialize='ones'))
 
         num_grad = numerical_gradient.calc(model.forward, x)
-        deriv_grad = model.backward(np.array([1, 1]))
+        deriv_grad = model.backward(np.array([1, 1]), backward_first_layer=True)
         num_grad = np.sum(num_grad, axis=0)
 
         numerical_gradient.assert_are_similar(deriv_grad, num_grad)
@@ -167,7 +167,7 @@ class SequentialModelTests(unittest.TestCase):
             SigmoidLayer()
         ])
         y = real_model.forward(x)
-        real_grad = real_model.backward(np.ones(5))
+        real_grad = real_model.backward(np.ones(5), backward_first_layer=True)
 
         num_model = SequentialModel([
             LinearLayer(5, 3, initialize='ones'),
@@ -190,7 +190,7 @@ class SequentialModelTests(unittest.TestCase):
             TanhLayer()
         ])
         y = real_model.forward(x)
-        real_grad = real_model.backward(np.ones(5))
+        real_grad = real_model.backward(np.ones(5), backward_first_layer=True)
 
         num_model = SequentialModel([
             LinearLayer(5, 3, initialize='ones'),
@@ -212,7 +212,7 @@ class SequentialModelTests(unittest.TestCase):
             TanhLayer()
         ])
         y = real_model.forward(x)
-        real_grad = real_model.backward(np.ones(5))
+        real_grad = real_model.backward(np.ones(5), backward_first_layer=True)
 
         num_model = SequentialModel([
             LinearLayer(5, 3, initialize='ones'),
@@ -229,12 +229,12 @@ class SequentialModelTests(unittest.TestCase):
 class ReluLayerTest(unittest.TestCase):
     def test_ReluNumericalGradient(self):
         layer = ReluLayer()
-        x = np.array([-13.3, -0.2, 53])
+        x = np.random.rand(5)
         layer.forward(x)
         grad = layer.backward(np.array([1.]))
-        numgrad = numerical_gradient.calc(layer.forward, x)
-        numgrad = numgrad.diagonal()
-        numerical_gradient.assert_are_similar(grad, numgrad)
+        num_grad = numerical_gradient.calc(layer.forward, x)
+        num_grad = num_grad.diagonal()
+        numerical_gradient.assert_are_similar(grad, num_grad)
 
 
 class SoftmaxLayerTest(unittest.TestCase):
@@ -246,17 +246,6 @@ class SoftmaxLayerTest(unittest.TestCase):
         numgrad = numerical_gradient.calc(layer.forward, x)
         numgrad = np.sum(numgrad, axis=1)
         numerical_gradient.assert_are_similar(grad, numgrad)
-
-
-# class ClaMaxLayerTest(unittest.TestCase):
-#
-#     def test_ClaMaxGradientCheck(self):
-#         x = np.random.rand(3)
-#         layer = ClaMaxLayer()
-#         layer.forward(x)
-#         grad = layer.backward(np.array([1.]))
-#         numgrad = numerical_gradient.calc(layer.forward, x)
-#         self.assertTrue(numerical_gradient.are_similar(grad, numgrad))
 
 
 class NumericalGradient(unittest.TestCase):
@@ -277,20 +266,22 @@ class NumericalGradient(unittest.TestCase):
         numerical_gradient.assert_are_similar(grad, numgrad)
 
 
-class SoftmaxNLLTest(unittest.TestCase):
+class CrossEntropyLossTest(unittest.TestCase):
     def test_numerical_gradient(self):
         x = np.random.rand(5)
-        target_class = 0
+        target_class = 1
 
-        loss = SoftmaxNLL()
+        loss = CrossEntropyLoss()
         y = loss.calc_loss(x, target_class)
         grad = loss.calc_gradient(y, target_class)
 
         def forward(i):
             return loss.calc_loss(i, target_class)
+
         num_grad = numerical_gradient.calc(forward, x)
 
         num_grad = np.sum(num_grad, axis=0)
+        print num_grad
         numerical_gradient.assert_are_similar(grad, num_grad)
 
 
@@ -305,5 +296,22 @@ class NLLGradientTest(unittest.TestCase):
         def loss_with_target(x):
             return nll.calc_loss(x, t)
 
+        num_grad = numerical_gradient.calc(loss_with_target, y).diagonal()
+        assert_almost_equal(grad, num_grad, decimal=2)
+
+
+class ClaudioMaxNLLGradientTest(unittest.TestCase):
+    def test_ClaudioMaxNLLNumericalGradient(self):
+        nll = ClaudioMaxNLL()
+        y = np.random.rand(5)
+        t = int(1)
+        nll.calc_loss(y, t)
+        grad = nll.calc_gradient(y, t)
+
+        def loss_with_target(x):
+            return nll.calc_loss(x, t)
+
         num_grad = numerical_gradient.calc(loss_with_target, y)
+        num_grad = np.sum(num_grad, axis=0)
+        # num_grad = np.sum(num_grad, axis=0)
         numerical_gradient.assert_are_similar(grad, num_grad)

@@ -1,18 +1,16 @@
 import numpy as np
 
 
-class LinearLayer:
-    def __init__(self, inputs, outputs, initialize="random"):
-        self.inputs = inputs
-        self.outputs = outputs
+class LinearLayer(object):
+    def __init__(self, n_inputs, n_outputs, initialize="random"):
         self.x = None
 
         if initialize == 'random':
-            self.W = np.random.rand(outputs, inputs + 1)
+            self.W = np.random.rand(n_outputs, n_inputs + 1)
         elif initialize == 'ones':
-            self.W = np.ones([outputs, inputs + 1])
+            self.W = np.ones([n_outputs, n_inputs + 1])
         elif initialize == 'zeros':
-            self.W = np.zeros([outputs, inputs + 1])
+            self.W = np.zeros([n_outputs, n_inputs + 1])
         else:
             raise Exception("Unrecognized initialization value")
 
@@ -29,7 +27,6 @@ class LinearLayer:
 
     def update_gradient(self, dJdy):
         grad = np.multiply(np.matrix(self.x).T, dJdy).T
-        # self.W += grad
         return grad
 
     @staticmethod
@@ -38,12 +35,24 @@ class LinearLayer:
             raise Exception("input is int64 type. It should be float")
 
 
+class RegularizedLinearLayer(LinearLayer):
+    def __init__(self, n_inputs, n_outputs, initialize, l1=0., l2=0.):
+        super(RegularizedLinearLayer, self).__init__(n_inputs, n_outputs, initialize)
+        self.l1 = l1
+        self.l2 = l2
+
+    def update_gradient(self, dJdy):
+        grad = super(RegularizedLinearLayer, self).update_gradient(dJdy)
+        l1_reg = self.l1 * np.sign(self.W)
+        l2_reg = self.l2 * self.W
+        return grad + l1_reg + l2_reg
+
+
 class SigmoidLayer:
     def __init__(self):
         pass
 
     def forward(self, x, is_training=False):
-        assert x.ndim == 1, "Sigmoid input is not one-dimensional"
         self.sigm_x = 1. / (1. + np.exp(-x))
         return self.sigm_x
 
@@ -75,7 +84,7 @@ class ReluLayer:
 class TanhLayer:
     def forward(self, x, is_training=False):
         self.y = np.tanh(x)
-        return np.tanh(x)
+        return self.y
 
     def backward(self, dJdy):
         return (1. - self.y ** 2) * dJdy
@@ -83,7 +92,8 @@ class TanhLayer:
 
 class SoftmaxLayer:
     def forward(self, x, is_training=False):
-        exp_x = np.exp(x)
+        c = np.max(x)
+        exp_x = np.exp(x - c)
         self.y = exp_x / np.sum(exp_x)
         return self.y
 

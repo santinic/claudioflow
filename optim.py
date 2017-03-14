@@ -1,7 +1,7 @@
 import numpy as np
 
 """
-Optimization methods implemented as described here:
+Optimization methods implemented as described in the Deep Learning Book:
 http://www.deeplearningbook.org/contents/optimization.html
 """
 
