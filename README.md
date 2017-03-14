@@ -13,9 +13,9 @@ as Keras interfaces.
 ```python
 model = SequentialModel([
     LinearLayer(2, 5),
-    ReluLayer(),
+    TanhLayer(),
     LinearLayer(5, 1),
-    ReluLayer(),
+    TanhLayer(),
 ])
 ```
 
@@ -42,10 +42,6 @@ model.learn(...)
 ## Why
 The only good way to understand modern neural network is to try to implement one from scratch.
 After that you can use TensorFlow.
-
-## Performance
-ClaudioFlow is slower than any other professional framework, but it's still very functional
-for many
 
 ## Implementend features
 - Minibatch learning with train/validation/test sets and "patience"
