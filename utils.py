@@ -7,3 +7,8 @@ def chunks(l, n):
 def partition(l, n):
     chunk_size = int(len(l) / n)
     return list(chunks(l, chunk_size))[:n]
+
+
+def slice_percentage(l, pc):
+    units = int((float(len(l)) / 100.) * (pc * 100))
+    return l[:units]

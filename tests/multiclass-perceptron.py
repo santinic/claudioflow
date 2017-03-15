@@ -13,7 +13,7 @@ from utils import chunks, partition
 
 
 def gen_data():
-    n = 200
+    n = 300
 
     # N clusters:
     # data, targets = datasets.make_classification(

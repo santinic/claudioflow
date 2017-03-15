@@ -64,13 +64,12 @@ class PlottableTrainer:
 
 
 class MinibatchTrainer:
-    def train_minibatches(self,
-                          model,
-                          train_data, train_targets,
+    def train_minibatches(self, model, train_set,
                           batch_size, loss, epochs, optimizer,
                           show_progress=False, save_progress=False):
 
-        data = zip(train_data, train_targets)
+        # copy train_set locally to shuffle it
+        data = list(train_set)
         for epoch in xrange(epochs):
             if show_progress: print("Epoch %d/%d" % (epoch + 1, epochs))
             random.shuffle(data)
