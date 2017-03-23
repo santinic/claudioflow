@@ -1,22 +1,28 @@
 import numpy as np
 
+from network import Layer
 
-class LinearLayer(object):
-    def __init__(self, n_inputs, n_outputs, initialize="random"):
+
+class Linear(object):
+    def __init__(self, n_inputs, n_outputs, initialize="random", dtype=None, scale=1.):
         self.x = None
+        self.dtype = dtype
+        self.first_x_already_checked = False
 
         if initialize == 'random':
-            self.W = np.random.rand(n_outputs, n_inputs + 1)
+            self.W = np.random.rand(n_outputs, n_inputs + 1).astype(dtype)
+            self.W *= scale
         elif initialize == 'ones':
-            self.W = np.ones([n_outputs, n_inputs + 1])
+            self.W = np.ones([n_outputs, n_inputs + 1], dtype=dtype)
+            self.W *= scale
         elif initialize == 'zeros':
-            self.W = np.zeros([n_outputs, n_inputs + 1])
+            self.W = np.zeros([n_outputs, n_inputs + 1], dtype=dtype)
         else:
             raise Exception("Unrecognized initialization value")
 
     def forward(self, x, is_training=False):
-        self.vector_type_check(x)
-        x = np.hstack([1, x])
+        self.check_first_x_dtype(x)
+        x = np.hstack([1., x])
         self.x = x
         y = self.W.dot(x)
         return y
@@ -29,26 +35,37 @@ class LinearLayer(object):
         grad = np.multiply(np.matrix(self.x).T, dJdy).T
         return grad
 
-    @staticmethod
-    def vector_type_check(x):
+    def backward_and_update(self, dJdy, optimizer):
+        dJdx = self.backward(dJdy)
+        update_gradient = self.update_gradient(dJdy)
+        optimizer.update(self, update_gradient)
+        return dJdx
+
+    def check_first_x_dtype(self, x):
+        if self.first_x_already_checked:
+            return
         if x.dtype == 'int64':
             raise Exception("input is int64 type. It should be float")
+        if self.dtype is not None:
+            if self.dtype != x.dtype:
+                raise Exception("input has dtype=%s, while LinearLayer configured as dtype=%s" % (x.dtype, self.dtype))
+        self.first_x_already_checked = True
 
 
-class RegularizedLinearLayer(LinearLayer):
+class RegularizedLinear(Linear):
     def __init__(self, n_inputs, n_outputs, initialize, l1=0., l2=0.):
-        super(RegularizedLinearLayer, self).__init__(n_inputs, n_outputs, initialize)
+        super(RegularizedLinear, self).__init__(n_inputs, n_outputs, initialize)
         self.l1 = l1
         self.l2 = l2
 
     def update_gradient(self, dJdy):
-        grad = super(RegularizedLinearLayer, self).update_gradient(dJdy)
+        grad = super(RegularizedLinear, self).update_gradient(dJdy)
         l1_reg = self.l1 * np.sign(self.W)
         l2_reg = self.l2 * self.W
         return grad + l1_reg + l2_reg
 
 
-class SigmoidLayer:
+class Sigmoid(Layer):
     def __init__(self):
         pass
 
@@ -61,7 +78,7 @@ class SigmoidLayer:
         return dydx * dJdy
 
 
-class SignLayer:
+class Sign(Layer):
     def forward(self, x, is_training=False):
         return np.sign(x)
 
@@ -69,7 +86,7 @@ class SignLayer:
         return dJdy
 
 
-class ReluLayer:
+class Relu(Layer):
     def forward(self, x, is_training=False):
         self.x = x
         return np.maximum(x, 0)
@@ -77,11 +94,11 @@ class ReluLayer:
     def backward(self, dJdy):
         # self.x >= 0 returns a vector with True/False booleans.
         # When multiplied by a 1. scalar you get a 1/0 bitmask
-        bitmask = (self.x >= 0) * 1
+        bitmask = (self.x >= 0)
         return bitmask * dJdy
 
 
-class TanhLayer:
+class Tanh(Layer):
     def forward(self, x, is_training=False):
         self.y = np.tanh(x)
         return self.y
@@ -90,7 +107,41 @@ class TanhLayer:
         return (1. - self.y ** 2) * dJdy
 
 
-class SoftmaxLayer:
+class CheapTanh(Layer):
+    def __init__(self, alpha=1.):
+        self.alpha = alpha
+
+    def forward(self, x, is_training=False):
+        self.x = x
+        a = self.alpha
+        y = np.where(x <= -a, -a, x)
+        y = np.where(y >= +a, +a, y)
+        return y
+
+    def backward(self, dJdy):
+        a = self.alpha
+        grad = np.array([1. if -a < x < a else 0. for x in self.x])
+        return grad * dJdy
+
+
+# class CheapSigmoidLayer:
+#     def __init__(self, alpha=1.):
+#         self.alpha = alpha
+#
+#     def forward(self, x, is_training=False):
+#         self.x = x
+#         a = self.alpha
+#         y = np.where(x <= -a, 0, x)
+#         y = np.where(y >= +a, 1, y)
+#         return y
+#
+#     def backward(self, dJdy):
+#         a = self.alpha
+#         grad = np.array([1. if -a < x < a else 0. for x in self.x])
+#         return grad * dJdy
+
+
+class Softmax(Layer):
     def forward(self, x, is_training=False):
         c = np.max(x)
         exp_x = np.exp(x - c)
@@ -105,8 +156,16 @@ class SoftmaxLayer:
         out = dJdy * dxdy
         return np.sum(out, axis=1)
 
+        # def backward(self, dJdy):
+        #     dJdx = np.zeros(dJdy.size)
+        #     for i in range(self.y.size):
+        #         aux_y = -self.y.copy()
+        #         aux_y[i] = (1-self.y[i])
+        #         dJdx[i] = self.y[i]*aux_y.dot(dJdy)
+        #     return dJdx
 
-class DropoutLayer:
+
+class Dropout(Layer):
     def __init__(self, p):
         self.p = p
         self.binomial = None
@@ -123,19 +182,75 @@ class DropoutLayer:
         return dJdy
 
 
-# class ClaMaxLayer:
-#
-#     def forward(self, x):
-#         self.sum_x = np.sum(x)
-#         self.y = x / self.sum_x
-#         return self.y
-#
-#     def backward(self, err):
-#         y_eyed = np.eye(self.y.size) * (1./self.sum_x - self.y)
-#         return y_eyed
+class ClaMax(Layer):
+    def forward(self, x):
+        self.sum_x = np.sum(x)
+        self.y = x / self.sum_x
+        return self.y
+
+    def backward(self, err):
+        y_eyed = np.eye(self.y.size) * (1. / self.sum_x - self.y)
+        return y_eyed
 
 
-class PrintLayer:
+class Sum(Layer):
+    '''
+    Sum Layer: [a,b,c] => a+b+c
+    backward: [dJdy, dJdy, dJdy]
+    '''
+
+    def forward(self, x, is_training=False):
+        self.size_of_x = x.size
+        y = np.sum(x, axis=0)
+        self.size_of_y = y.size
+        return y
+
+    def backward(self, dJdy):
+        return dJdy * np.ones(self.size_of_y)
+
+
+class Mul(Layer):
+    """
+    Multiplication Layer: [a,b,c] => a*b*c
+    backward: dJdy * [bc, ac, ab]
+    """
+
+    def forward(self, x, is_training=False):
+        self.x = x
+        self.y = np.prod(x, axis=0)
+        return self.y
+
+    def backward(self, dJdy):
+        return dJdy * (self.y / self.x)
+
+
+class Const(Layer):
+    def __init__(self, const=1.):
+        self.const = np.array(const)
+
+    def forward(self, x, is_training=False):
+        return self.const
+
+    def backward(self, dJdy):
+        return np.array([0])
+
+
+class Store(Layer):
+    def __init__(self, input_size):
+        self.value = np.zeros(input_size)
+
+    def forward(self, x, is_training=False):
+        self.value = x
+        return x
+
+    def backward(self, dJdy):
+        return dJdy
+
+    def read(self):
+        return self.value
+
+
+class Print(Layer):
     def __init__(self, prefix=None):
         self.prefix = prefix
 

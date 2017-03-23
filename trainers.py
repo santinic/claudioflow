@@ -9,25 +9,24 @@ from utils import chunks
 
 
 class SimpleTrainer:
-    def train(self, model, train_data, train_targets, loss, epochs, optimizer, show_progress=False,
-              save_progress=False):
+    def train(self, model, train_set, loss, epochs, optimizer, show_progress=False, save_progress=False):
         """This is "online learning": we backpropagate after forwarding one input_data at the time."""
+        epochs_losses = []
         for epoch in xrange(epochs):
             if show_progress: print("Epoch %d/%d" % (epoch + 1, epochs))
-            input_count = 0
-            for x, target in izip(train_data, train_targets):
-                self.show_progress(show_progress, input_count, train_data)
+            epoch_loss_sum = 0.
+            for x, target in train_set:
                 J, dJdy = self.train_one(model, x, target, loss, optimizer, show_progress=show_progress)
-                if save_progress:
-                    self.errors_history.append(J)
-                    self.loss_gradient_history.append(dJdy)
-                input_count += 1
+                epoch_loss_sum += J
+            epoch_mean_loss = epoch_loss_sum / float(epochs)
+            epochs_losses.append(epoch_mean_loss)
+        return epochs_losses
 
     def train_one(self, model, x, target, loss, optimizer, show_progress=False):
         y = model.forward(x, is_training=True)
         J = loss.calc_loss(y, target)
         dJdy = loss.calc_gradient(y, target)
-        model.backward(dJdy, optimizer)
+        model.backward_and_update(dJdy, optimizer)
         return J, dJdy
 
     # def test(self, input_data, target_data, loss):
@@ -36,12 +35,6 @@ class SimpleTrainer:
     #         print (y)
     #         output = loss.output(y)
     #         print output, target
-
-    def show_progress(self, show_progress, count, input_data):
-        if show_progress:
-            if count % 1000 == 0:
-                progress = (count * 100) / len(input_data)
-                print("Training %d%% (%d of %d)" % (progress, count, len(input_data)))
 
 
 class PlottableTrainer:
@@ -65,37 +58,52 @@ class PlottableTrainer:
 
 class MinibatchTrainer:
     def train_minibatches(self, model, train_set,
-                          batch_size, loss, epochs, optimizer,
+                          batch_size, loss, epochs, optimizer, shuffle=True,
                           show_progress=False, save_progress=False):
 
         # copy train_set locally to shuffle it
         data = list(train_set)
+        epoch_mean_losses = []
         for epoch in xrange(epochs):
-            if show_progress: print("Epoch %d/%d" % (epoch + 1, epochs))
-            random.shuffle(data)
-            for batch in chunks(data, batch_size):
-                self.train_one_minibatch(model, batch, loss, optimizer)
+            if shuffle:
+                random.shuffle(data)
 
-    def train_one_minibatch(self, model, batch, loss, optimizer):
-        mean_loss, mean_delta = self.forward_one_minibatch(model, batch, loss)
-        model.backward(mean_delta, optimizer)
-        return mean_loss, mean_delta
+            batch_mean_losses_sum = 0.
+            for batch in chunks(data, batch_size):
+                batch_mean_loss = self.train_one_minibatch(model, batch, loss, optimizer)
+                batch_mean_losses_sum += batch_mean_loss
+
+            epoch_mean_loss = batch_mean_losses_sum / float(batch_size)
+            epoch_mean_losses.append(epoch_mean_loss)
+
+            if show_progress:
+                print("Epoch %d/%d: Epoch Mean Loss = %f" % (epoch + 1, epochs, batch_mean_loss))
+        return epoch_mean_losses
+
+    def train_one_minibatch(self, model, batch, loss, optimizer=None):
+        batch_mean_loss, mean_delta, mean_x = self.forward_one_minibatch(model, batch, loss)
+        model.forward(mean_x)
+        model.backward_and_update(mean_delta, optimizer)
+        return batch_mean_loss
 
     def forward_one_minibatch(self, model, batch, loss):
         loss_sum = 0.
         delta_sum = 0.
+        x_sum = 0.
         for couple in batch:
-            assert couple is not None
             x, target = couple
             y = model.forward(x)
             J = loss.calc_loss(y, target)
             dJdy = loss.calc_gradient(y, target)
             loss_sum += J
             delta_sum += dJdy
+            x_sum += x
         batches_n = float(len(batch))
+        mean_x = x_sum /batches_n
         mean_delta = delta_sum / batches_n
-        mean_loss = loss_sum / batches_n
-        return mean_loss, mean_delta
+        mean_losses = loss_sum / batches_n
+        batch_mean_loss = np.mean(mean_losses)
+        return batch_mean_loss, mean_delta, mean_x
 
     train = train_minibatches
 
@@ -106,9 +114,10 @@ class PatienceTrainer(MinibatchTrainer):
     """
 
     def train(self, model,
-              train_set, valid_set, test_set,
+              train_batches, valid_batch, test_batch,
               batch_size, loss, max_epochs, optimizer,
-              patience=50000, patience_increase=2, improvement_threshold=0.995):
+              test_score_function,
+              patience=10000, patience_increase=2, improvement_threshold=0.995):
         """
         :param model: the SequentialModel instance to use
         :param train_set:
@@ -123,15 +132,7 @@ class PatienceTrainer(MinibatchTrainer):
         :param improvement_threshold: a relative improvement of this much is considered significant
         :return:
         """
-
-        train_data, train_targets = train_set
-        valid_data, valid_targets = valid_set
-        test_data, test_targets = test_set
-
-        valid_batch = zip(valid_data, valid_targets)
-        test_batch = zip(test_data, test_targets)
-
-        n_train_batches = train_data.shape[0] // batch_size
+        n_train_batches = float(len(train_batches)) // batch_size
 
         # go through this many minibatches before checking the network on the validation set;
         # in this case we check every epoch
@@ -147,18 +148,16 @@ class PatienceTrainer(MinibatchTrainer):
 
         while (epoch < max_epochs) and (not done_looping):
             epoch += 1
-            train_batches = zip(train_data, train_targets)
             for minibatch_index, minibatch in enumerate(list(chunks(train_batches, batch_size))):
-                train_loss, train_delta = self.train_one_minibatch(model, minibatch, loss, optimizer)
                 iter_i = (epoch - 1) * n_train_batches + minibatch_index
+                train_batch_mean_loss = self.train_one_minibatch(model, minibatch, loss, optimizer)
 
                 if (iter_i + 1) % validation_frequency == 0:
                     # compute zero-one loss on validation set
-                    valid_losses, valid_delta = self.forward_one_minibatch(model, valid_batch, loss)
-                    mean_valid_loss = np.mean(valid_losses)
+                    mean_valid_loss, valid_delta, mean_x = self.forward_one_minibatch(model, valid_batch, loss)
 
-                    print('epoch %i, minibatch %i/%i, validation error %f %%' %
-                          (epoch, minibatch_index + 1, n_train_batches, mean_valid_loss * 100.))
+                    print('epoch %i, minibatch %i/%i, validation error %f, last train batch err %f (patience %d)' %
+                          (epoch, minibatch_index + 1, n_train_batches, mean_valid_loss, train_batch_mean_loss, patience))
 
                     # if we got the best validation score until now
                     if mean_valid_loss < best_valid_loss:
@@ -170,11 +169,10 @@ class PatienceTrainer(MinibatchTrainer):
                         best_iter = iter_i
 
                         # test it on the test set
-                        test_loss, test_delta = self.forward_one_minibatch(model, test_batch, loss)
-                        test_score = np.mean(test_loss)
+                        test_score = test_score_function(model, test_batch)
 
                         print('\tepoch %i, minibatch %i/%i, test error of best model %f %%' %
-                              (epoch, minibatch_index + 1, n_train_batches, test_score * 100.))
+                              (epoch, minibatch_index + 1, n_train_batches, test_score))
 
                 if patience <= iter_i:
                     done_looping = True
@@ -183,5 +181,5 @@ class PatienceTrainer(MinibatchTrainer):
         end_time = timeit.default_timer()
         print('Optimization complete. Best validation score of %f %% '
               'obtained at iteration %i, with test performance %f %%' %
-              (best_valid_loss * 100., best_iter + 1, test_score * 100.))
+              (best_valid_loss, best_iter + 1, test_score))
         print('The code for file ' + os.path.split(__file__)[1] + ' ran for %.2fm' % ((end_time - start_time) / 60.))

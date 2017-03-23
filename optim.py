@@ -15,7 +15,7 @@ class SGD:
 
 
 class MomentumSGD:
-    def __init__(self, learning_rate, momentum):
+    def __init__(self, learning_rate, momentum=0.):
         self.learning_rate = learning_rate
         self.momentum = momentum
 

@@ -5,25 +5,39 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import analyser
-from layers import LinearLayer, SoftmaxLayer, ReluLayer, RegularizedLinearLayer
+from layers import Linear, Softmax, Relu, RegularizedLinear
 from loss import CrossEntropyLoss
 from optim import RMSProp, MomentumSGD, AdaGrad
-from sequential import SequentialModel
+from network import Seq
 from trainers import MinibatchTrainer, PatienceTrainer
 from utils import slice_percentage
 
 
-class MnistTrainer:
+class MnistExperiment:
     def __init__(self):
         train_set, valid_set, test_set = self.load_mnist_dataset()
         # train_set = [train_set[0][0:1000], train_set[1][0:1000]]
+
+        # make all the targets, one-hot-vectors. For example 3 becomes [0, 0, 1, 0, 0, 0, 0, 0, 0, 0]
+        classes_n = 10
+        # print(train_set[0][1])
+        self.make_one_hot_vectors(classes_n, train_set)
+        self.make_one_hot_vectors(classes_n, valid_set)
+        self.make_one_hot_vectors(classes_n, test_set)
+        # print(train_set[0][1])
+
         self.train_set = train_set
         self.valid_set = valid_set
         self.test_set = test_set
 
-    def run(self, batch_size=10, learning_rate=0.8, train_set_percentage=1.0, epochs=3):
-        model = SequentialModel([
-            LinearLayer(784, 10, initialize='random'),
+    @staticmethod
+    def make_one_hot_vectors(classes_n, train_set):
+        for i, (x, target_class) in enumerate(train_set):
+            train_set[i] = (x, CrossEntropyLoss.make_one_hot_target(classes_n, target_class))
+
+    def run(self, batch_size=10, learning_rate=0.6, train_set_percentage=1.0, epochs=3):
+        model = Seq([
+            Linear(784, 10, initialize='random'),
         ])
 
         train_set_sliced = slice_percentage(self.train_set, train_set_percentage)
@@ -34,33 +48,31 @@ class MnistTrainer:
                                   batch_size=batch_size,
                                   loss=CrossEntropyLoss(),
                                   epochs=epochs,
-                                  # optimizer=MomentumSGD(learning_rate=0.8, momentum=0.8),
+                                  optimizer=MomentumSGD(learning_rate=learning_rate, momentum=0.5),
                                   # optimizer=RMSProp(learning_rate=learning_rate, decay_rate=0.9),
-                                  optimizer=AdaGrad(learning_rate=learning_rate),
+                                  # optimizer=AdaGrad(learning_rate=learning_rate),
                                   show_progress=True)
 
-        train_score, test_score = self.get_score(model, self.train_set, self.test_set)
-
-        return {
-            'train_score': train_score,
-            'test_score': test_score,
-        }
+        self.show_mnist_grid(model, self.test_set)
 
         # trainer = PatienceTrainer()
         # trainer.train(model,
-        #               train_set, valid_set, test_set,
-        #               batch_size=20,
+        #               train_set_sliced, self.valid_set, self.test_set,
+        #               batch_size=batch_size,
         #               loss=CrossEntropyLoss(),
-        #               max_epochs=1000,
-        #               # optimizer=RMSProp(learning_rate=0.13, decay_rate=0.9),
-        #               optimizer=AdaGrad(learning_rate=0.9)
+        #               max_epochs=100,
+        #               # optimizer=MomentumSGD(learning_rate=learning_rate, momentum=0.5),
+        #               optimizer=RMSProp(learning_rate=learning_rate, decay_rate=0.9),
+        #               # optimizer=AdaGrad(learning_rate=learning_rate),
+        #               test_score_function=self.test_score_fun
         # )
 
-        # self.print_score(model, train_set[0], train_set[1], test_set[0], test_set[1])
+        test_score = CrossEntropyLoss().test_score(model, self.test_set)
 
-        # self.show_mnist_grid(model, test_set)
-        # model.save_to_file('mnist-b600-e1000-adagrad.pkl')
-        # plt.show()
+        return {
+            # 'train_score': train_score,
+            'test_score': test_score,
+        }
 
     def load_mnist_dataset(self):
         with gzip.open('./mnist.pkl.gz', 'rb') as f:
@@ -84,23 +96,8 @@ class MnistTrainer:
         ax[0].set_yticks([])
         plt.tight_layout()
 
-    def get_score(self, model, train_set, test_set):
-        train_err = 0
-        for x, target in train_set:
-            if np.argmax(model.forward(x)) != target:
-                train_err += 1
-        train_score = (1.0 - train_err / float(len(train_set))) * 100.0
 
-        test_err = 0
-        for x, target in test_set:
-            if np.argmax(model.forward(x)) != target:
-                test_err += 1
-        test_score = (1.0 - test_err / float(len(test_set))) * 100.0
-        return train_score, test_score
-
-
-# MnistTrainer().run()
-
-results = analyser.analyse(MnistTrainer().run,
-                           learning_rate=[1, 0.8, 0.5], batch_size=10, epochs=[2,4], train_set_percentage=1)
+experiment = MnistExperiment()
+results = analyser.analyse(experiment.run,
+                           learning_rate=[0.1], batch_size=60, epochs=[20], train_set_percentage=1)
 analyser.plot_analyser_results(results)

@@ -1,5 +1,7 @@
 import numpy as np
 
+from layers import Softmax
+
 
 class SquaredLoss:
     def calc_loss(self, y, target):
@@ -23,34 +25,35 @@ class NegLogLikelihoodLoss:
 class CrossEntropyLoss:
     """This is the combination of a final SoftmaxLayer and a Negative Log-Likelihood loss function."""
 
-    def calc_loss(self, x, target_class):
+    def calc_loss(self, x, one_hot_target):
         c = np.max(x)
         exp_x = np.exp(x - c)
         self.y = np.divide(exp_x, np.sum(exp_x))
 
-        self.one_hot_target = self.make_one_hot_target(x, target_class)
-        J = - self.one_hot_target * np.log(self.y)
+        J = - one_hot_target * np.log(self.y)
         return J
 
-    def calc_gradient(self, y, target_class):
-        return self.y - self.one_hot_target
-
-    # def calc_loss_gas(self, y, target_class):
-    #     self.one_hot_target = self.make_one_hot_target(y, target_class)
-    #     totlog = np.log(np.sum(np.exp(y)))
-    #     return self.one_hot_target * (totlog - y)
-    #
-    # def calc_gradient_gas(self, y, target_class):
-    #     exp_y = np.exp(y - np.max(y))
-    #     self.y = exp_y / np.sum(exp_y)
-    #     return self.y - self.one_hot_target
+    def calc_gradient(self, y, one_hot_target):
+        return self.y - one_hot_target
 
     @staticmethod
-    def make_one_hot_target(x, target_class):
+    def make_one_hot_target(classes_n, target_class):
         target_class_int = int(target_class)
-        one_hot = np.zeros(x.size)
+        one_hot = np.zeros(classes_n)
         one_hot[target_class_int] = 1
         return one_hot
+
+    @staticmethod
+    def test_score(model, test_set):
+        test_err = 0.
+        for x, target in test_set:
+            y = model.forward(x)
+            y = Softmax().forward(y)
+            # print(y, np.argmax(y), np.argmax(target))
+            if np.argmax(y) != np.argmax(target):
+                test_err += 1.
+        test_score = (1.0 - test_err / float(len(test_set))) * 100.0
+        return test_score
 
 
 NLL = NegLogLikelihoodLoss
@@ -58,7 +61,7 @@ NLL = NegLogLikelihoodLoss
 
 class ClaudioMaxNLL:
     def calc_loss(self, y, target_class):
-        one_hot_target = CrossEntropyLoss.make_one_hot_target(y, target_class)
+        one_hot_target = CrossEntropyLoss.make_one_hot_target(y.size, target_class)
         self.y = y
         self.s = np.sum(y)
         J = - one_hot_target * (y / self.s)

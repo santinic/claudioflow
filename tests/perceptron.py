@@ -4,10 +4,11 @@ from itertools import izip
 import matplotlib.pyplot as plt
 from sklearn import datasets
 
-from layers import LinearLayer, SigmoidLayer
+from layers import Linear, Sigmoid
 from loss import SquaredLoss
 from optim import RMSProp, AdaGrad, MomentumSGD, SGD
-from sequential import SequentialModel
+from network import Seq
+from trainers import SimpleTrainer
 
 OUTPUT_A = 1.
 OUTPUT_B = 0.
@@ -45,14 +46,14 @@ def gen_data():
     plt.scatter(x0, y0, color='gray', marker="o", s=100)
     plt.scatter(x1, y1, color='gray', marker="x", s=100)
 
-    return train_data, train_targets, test_data, test_targets
+    return zip(train_data, train_targets), zip(test_data, test_targets)
 
 
-def scatter_test_data(data, target, model):
+def scatter_test_data(test_set, model):
     plt.figure(1)
     color = lambda y: 'b' if y > MIDDLE else 'r'
 
-    for x, target in izip(data, target):
+    for x, target in test_set:
         y = model.forward(x)
         # print(y, y > MIDDLE)
         plt.scatter(x[0], x[1], s=40, c=color(y))
@@ -60,44 +61,43 @@ def scatter_test_data(data, target, model):
 
 class Perceptron(unittest.TestCase):
     def test_Perceptron(self):
-        train_data, train_targets, test_data, test_targets = gen_data()
+        train_set, test_set = gen_data()
 
-        model = SequentialModel([
-            LinearLayer(2, 5, initialize='random'),
-            SigmoidLayer(),
-            LinearLayer(5, 1, initialize='random'),
-            SigmoidLayer(),
+        model = Seq([
+            Linear(2, 5, initialize='random'),
+            Sigmoid(),
+            Linear(5, 1, initialize='random'),
+            Sigmoid(),
         ])
 
-        # model.learn(input_data=train_data,
-        #             target_data=train_targets,
-        #             loss=SquaredLoss(),
-        #
-        #             # optimizer=SGD(learning_rate=0.1),
-        #             # optimizer=MomentumSGD(learning_rate=0.1, momentum=0.9),
-        #             # optimizer=AdaGrad(learning_rate=0.9),
-        #             optimizer=RMSProp(learning_rate=0.1, decay_rate=0.9),
-        #
-        #             epochs=200,
-        #             save_progress=True)
+        SimpleTrainer().train(model,
+                              train_set=train_set,
+                              loss=SquaredLoss(),
+                              # optimizer=SGD(learning_rate=0.1),
+                              optimizer=MomentumSGD(learning_rate=0.1, momentum=0.9),
+                              # optimizer=AdaGrad(learning_rate=0.9),
+                              # optimizer=RMSProp(learning_rate=0.1, decay_rate=0.9),
 
-        model.learn_minibatch(
-            input_data=train_data,
-            target_data=train_targets,
-            loss=SquaredLoss(),
-            batch_size=5,
-            # optimizer=SGD(learning_rate=0.1),
-            # optimizer=MomentumSGD(learning_rate=0.1, momentum=0.9),
-            optimizer=AdaGrad(learning_rate=0.9),
-            # optimizer=RMSProp(learning_rate=0.1, decay_rate=0.9),
+                              epochs=200,
+                              save_progress=False)
 
-            epochs=100,
-            save_progress=True)
+        # model.learn_minibatch(
+        # input_data=train_data,
+        # target_data=train_targets,
+        # loss=SquaredLoss(),
+        # batch_size=5,
+        # # optimizer=SGD(learning_rate=0.1),
+        # # optimizer=MomentumSGD(learning_rate=0.1, momentum=0.9),
+        # optimizer=AdaGrad(learning_rate=0.9),
+        # # optimizer=RMSProp(learning_rate=0.1, decay_rate=0.9),
+        #
+        # epochs=100,
+        # save_progress=True)
 
         model.save_to_file('perceptron.pkl')
 
-        scatter_test_data(test_data, test_targets, model)
+        scatter_test_data(test_set, model)
 
-        model.plot_errors_history()
-        model.plot_loss_gradient_history()
+        # model.plot_errors_history()
+        # model.plot_loss_gradient_history()
         plt.show()

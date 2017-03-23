@@ -25,14 +25,18 @@ def analyse(train_function, **kwargs):
         end_time = timeit.default_timer()
         outputs['time'] = (end_time - start_time) / 60.
 
-        result = (combination_dict, outputs)
-        results.append(result)
+        combination_dict['outputs'] = outputs
+        results.append(combination_dict)
     return results
 
 
 def plot_analyser_results(results):
     for r in results:
         print(r)
+
+def plot_analyser_results_fix(results, move):
+    pass
+
 
 # def f(learning_rate, batch_size):
 #     return { 'train_score': 100, 'test_score': 200 }
