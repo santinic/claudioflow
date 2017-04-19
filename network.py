@@ -5,11 +5,8 @@ import cPickle as pickle
 
 
 class Layer:
-    def forward_and_update(self, x):
-        return self.forward(x)
-
-    def backward_and_update(self, dJdy, optimizer):
-        return self.backward(dJdy)
+    def update_weights(self, optimizer):
+        return
 
 
 class Serializable:
@@ -58,9 +55,9 @@ class Seq(Layer, WithLayers, Serializable):
             delta = layer.backward(delta)
         return delta
 
-    def backward_and_update(self, delta, optimizer, backward_first_layer=True):
+    def update_weights(self, optimizer):
         for layer in reversed(self.layers):
-            delta = layer.backward_and_update(delta, optimizer=optimizer)
+            delta = layer.update_weights(optimizer)
         return delta
 
     def forward_all(self, xs, is_training=False):

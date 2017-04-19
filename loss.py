@@ -1,6 +1,7 @@
 import numpy as np
 
 from layers import Softmax
+from utils import make_one_hot_target
 
 
 class SquaredLoss:
@@ -37,13 +38,6 @@ class CrossEntropyLoss:
         return self.y - one_hot_target
 
     @staticmethod
-    def make_one_hot_target(classes_n, target_class):
-        target_class_int = int(target_class)
-        one_hot = np.zeros(classes_n)
-        one_hot[target_class_int] = 1
-        return one_hot
-
-    @staticmethod
     def test_score(model, test_set):
         test_err = 0.
         for x, target in test_set:
@@ -61,7 +55,7 @@ NLL = NegLogLikelihoodLoss
 
 class ClaudioMaxNLL:
     def calc_loss(self, y, target_class):
-        one_hot_target = CrossEntropyLoss.make_one_hot_target(y.size, target_class)
+        one_hot_target = make_one_hot_target(y.size, target_class)
         self.y = y
         self.s = np.sum(y)
         J = - one_hot_target * (y / self.s)

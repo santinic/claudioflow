@@ -9,7 +9,7 @@ from layers import Linear, Sigmoid
 from loss import CrossEntropyLoss
 from network import Seq
 from optim import SGD
-from trainers import SimpleTrainer
+from trainers import OnlineTrainer
 from utils import to_one_hot_vector_targets
 
 from sklearn.datasets import load_iris
@@ -39,7 +39,7 @@ class IrisTest(unittest.TestCase):
             model = Seq(l1, Sigmoid, l2)
             loss = CrossEntropyLoss()
 
-            trainer = SimpleTrainer()
+            trainer = OnlineTrainer()
             losses = trainer.train(model, self.train_set,
                                    epochs=100,
                                    loss=loss,

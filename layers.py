@@ -1,22 +1,23 @@
 import numpy as np
 
 from network import Layer
+from utils import split_array_into_variable_sizes
 
 
 class Linear(object):
-    def __init__(self, n_inputs, n_outputs, initialize="random", dtype=None, scale=1.):
+    def __init__(self, in_size, out_size, initialize="random", dtype=None):
         self.x = None
         self.dtype = dtype
         self.first_x_already_checked = False
 
+        self.delta_W = np.zeros([out_size, in_size + 1], dtype=dtype)
+
         if initialize == 'random':
-            self.W = np.random.rand(n_outputs, n_inputs + 1).astype(dtype)
-            self.W *= scale
+            self.W = np.random.rand(out_size, in_size + 1).astype(dtype)
         elif initialize == 'ones':
-            self.W = np.ones([n_outputs, n_inputs + 1], dtype=dtype)
-            self.W *= scale
+            self.W = np.ones([out_size, in_size + 1], dtype=dtype)
         elif initialize == 'zeros':
-            self.W = np.zeros([n_outputs, n_inputs + 1], dtype=dtype)
+            self.W = np.zeros([out_size, in_size + 1], dtype=dtype)
         else:
             raise Exception("Unrecognized initialization value")
 
@@ -28,18 +29,18 @@ class Linear(object):
         return y
 
     def backward(self, dJdy):
+        self.delta_W += self.calc_update_gradient(dJdy)
         weights_without_bias = self.W[:, 1:]
         return weights_without_bias.T.dot(dJdy)
 
-    def update_gradient(self, dJdy):
+    def calc_update_gradient(self, dJdy):
         grad = np.multiply(np.matrix(self.x).T, dJdy).T
         return grad
 
-    def backward_and_update(self, dJdy, optimizer):
-        dJdx = self.backward(dJdy)
-        update_gradient = self.update_gradient(dJdy)
-        optimizer.update(self, update_gradient)
-        return dJdx
+    def update_weights(self, optimizer):
+        optimizer.update(self, self.delta_W)
+        # reset delta_W
+        self.delta_W = np.zeros(self.W.shape)
 
     def check_first_x_dtype(self, x):
         if self.first_x_already_checked:
@@ -53,16 +54,40 @@ class Linear(object):
 
 
 class RegularizedLinear(Linear):
-    def __init__(self, n_inputs, n_outputs, initialize, l1=0., l2=0.):
-        super(RegularizedLinear, self).__init__(n_inputs, n_outputs, initialize)
+    def __init__(self, n_inputs, out_size, initialize='random', l1=0., l2=0.):
+        super(RegularizedLinear, self).__init__(n_inputs, out_size, initialize)
         self.l1 = l1
         self.l2 = l2
 
-    def update_gradient(self, dJdy):
-        grad = super(RegularizedLinear, self).update_gradient(dJdy)
+    def calc_update_gradient(self, dJdy):
+        grad = super(RegularizedLinear, self).calc_update_gradient(dJdy)
         l1_reg = self.l1 * np.sign(self.W)
         l2_reg = self.l2 * self.W
         return grad + l1_reg + l2_reg
+
+
+class Wx(Linear):
+    def __init__(self, in_size, out_size, initialize='random'):
+        if initialize == 'random':
+            self.W = np.random.rand(out_size, in_size)
+        elif initialize == 'ones':
+            self.W = np.ones([out_size, in_size])
+        elif initialize == 'zeros':
+            self.W = np.zeros([out_size, in_size])
+
+        self.delta_W = np.zeros(self.W.shape)
+
+    def forward(self, x, is_training=False):
+        self.x = x
+        return self.W.dot(x)
+
+    def backward(self, dJdy):
+        self.delta_W += self.calc_update_gradient(dJdy)
+        return self.W.T.dot(dJdy)
+
+    def update_weights(self, optimizer):
+        optimizer.update(self, self.delta_W)
+        self.delta_W = np.zeros(self.W.shape)
 
 
 class Sigmoid(Layer):
@@ -176,10 +201,12 @@ class Dropout(Layer):
                 self.binomial = np.random.binomial(1, self.p, size=x.shape)
             return self.binomial * x
         else:
-            return x
+            return x * self.p
 
     def backward(self, dJdy):
-        return dJdy
+        ret = dJdy * self.binomial
+        self.binomial = None
+        return ret
 
 
 class ClaMax(Layer):
@@ -236,18 +263,31 @@ class Const(Layer):
 
 
 class Store(Layer):
-    def __init__(self, input_size):
-        self.value = np.zeros(input_size)
+    def __init__(self, in_size):
+        self.x = np.zeros(in_size)
 
     def forward(self, x, is_training=False):
-        self.value = x
+        self.x = x
         return x
 
     def backward(self, dJdy):
+        self.grad = dJdy
         return dJdy
 
-    def read(self):
-        return self.value
+    def read_forward(self):
+        return self.x
+
+    # def read_backward(self):
+    #     return self.grad
+
+
+class Concat(Layer):
+    def forward(self, values):
+        self.sizes = map(len, values)
+        return np.hstack(values)
+
+    def backward(self, dJdy):
+        return split_array_into_variable_sizes(dJdy, self.sizes)
 
 
 class Print(Layer):

@@ -1,12 +1,8 @@
-import unittest
-
 import numpy as np
-from numpy.testing import assert_array_equal
-
 import layers
 
 
-class Op:
+class SyntaxOp:
     def __init__(self, input=None):
         self.inputs = [input]
 
@@ -33,31 +29,38 @@ class Op:
             input_str = '(%s)' % input_str
         return '%s%s' % (name, input_str)
 
-    def explore_forward(self, input_dict, depth=0):
+    def forward_variables(self, input_dict, depth=0, debug=False):
         values = []
         for input_op in self.inputs:
-            val = input_op.explore_forward(input_dict, depth + 1)
+            val = input_op.forward_variables(input_dict, depth + 1, debug)
             values.append(val)
-            print '%s%s -> %s' % ('\t' * depth, input_op, val)
+            if debug:
+                print('%s%s -> %s' % ('\t' * depth, input_op, val))
         x = values[0] if len(values) == 1 else values
-        y = self.forward(np.array(x))
-        print("forward of", self, self.inputs, y)
+        y = self.layer_forward(np.array(x))
         return y
 
-    def explore_backward(self, deltas, depth=0):
-        print '%s%s <- deltas=%s' % ('\t' * depth, self, deltas)
-        deltas = self.backward(deltas)
+    def backward_variables(self, deltas, depth=0, debug=False):
+        if debug:
+            print('%s%s <- deltas=%s' % ('\t' * depth, self, deltas))
+        deltas = self.layer_backward(deltas)
         if len(self.inputs) == 1:
-            return self.inputs[0].explore_backward(deltas, depth=depth + 1)
+            return self.inputs[0].backward_variables(deltas, depth + 1, debug)
         else:
             ret_deltas = []
             for input_op, dJdy in zip(self.inputs, deltas):
-                delta = input_op.explore_backward(dJdy, depth=depth + 1)
+                delta = input_op.backward_variables(dJdy, depth + 1, debug)
                 ret_deltas.append(delta)
-        # print('\t'*depth+'unmerged'+str(ret_deltas))
         merged = self.merge_backprop_dicts(ret_deltas)
-        # print('\t'*depth+'merged'+str(merged))
         return merged
+
+    def update_weights(self, optimizer, depth=0, debug=False):
+        if debug:
+            print('%s%s' % ('\t' * depth, self))
+
+        self.layer_update_weights(optimizer)
+        for input in self.inputs:
+            input.update_weights(optimizer, depth + 1, debug)
 
     @staticmethod
     def merge_backprop_dicts(dicts):
@@ -70,131 +73,87 @@ class Op:
                     merged[k] = v
         return merged
 
-    def forward(self, values):
+    def layer_forward(self, values):
         return self.layer.forward(values)
 
-    def backward(self, dJdy):
+    def layer_backward(self, dJdy):
         return self.layer.backward(dJdy)
 
+    def layer_update_weights(self, optimizer):
+        self.layer.update_weights(optimizer)
 
-class Var(Op):
+
+class Var(SyntaxOp):
     def __init__(self, variable_name):
         self.variable_name = variable_name
         self.inputs = []
 
-    def explore_forward(self, input_dict, depth):
+    def forward_variables(self, input_dict, depth, debug):
         val = input_dict[self.variable_name]
         return val
 
-    def explore_backward(self, deltas, depth):
+    def backward_variables(self, deltas, depth, debug):
         grad_dict = {}
         grad_dict[self.variable_name] = deltas
         return grad_dict
 
-    def forward(self, values):
+    def layer_forward(self, values):
         return values
 
-    def backward(self, dJdy):
+    def layer_backward(self, dJdy):
         return dJdy
 
+    def layer_update_weights(self, optimizer):
+        return
+
     def __str__(self):
-        return Op.__str__(self, name=self.variable_name)
+        return SyntaxOp.__str__(self, name=self.variable_name)
 
 
-class Linear(Op):
-    def __init__(self, in_size, out_size, inputs=[]):
-        Op.__init__(self, inputs)
-        self.layer = layers.Linear(in_size, out_size)
+class Linear(SyntaxOp):
+    def __init__(self, in_size, out_size, initialize='random', dtype=None, input=None):
+        SyntaxOp.__init__(self, input)
+        self.layer = layers.Linear(in_size, out_size, initialize, dtype)
 
 
-class Tanh(Op):
+class Tanh(SyntaxOp):
     layer = layers.Tanh()
 
 
-class Sigmoid(Op):
+class Sigmoid(SyntaxOp):
     layer = layers.Sigmoid()
 
 
-class Sum(Op):
+class Sum(SyntaxOp):
     def __init__(self, *args):
         self.layer = layers.Sum()
         self.inputs = args
 
 
-class Mul(Op):
+class Mul(SyntaxOp):
     def __init__(self, *args):
         self.layer = layers.Mul()
         self.inputs = args
 
 
-class Const(Op):
+class Concat(SyntaxOp):
+    def __init__(self, *args):
+        self.layer = layers.Concat()
+        self.inputs = args
+
+
+class Const(SyntaxOp):
     def __init__(self, const):
-        Op.__init__(self)
-        self.layer = layers.Const(const)
+        SyntaxOp.__init__(self)
+        self.const = const
         self.inputs = []
 
+    def layer_forward(self, x):
+        return np.array([self.const])
 
-class SyntaxTest(unittest.TestCase):
-    def test_merge_dicts(self):
-        dict = [
-            {'a': np.array([1, 1])},
-            {'a': np.array([2, 2])},
-            {'b': np.array([4, 4])}
-        ]
-        merged = Op.merge_backprop_dicts(dict)
-        assert_array_equal(merged['a'], np.array([3, 3]))
-        assert_array_equal(merged['b'], np.array([4, 4]))
 
-    def test_basic(self):
-        a_var = Var('a')
-        b_var = Var('b')
-        a = np.array([2., 3.])
-        b = np.array([3., 5.])
-        input_dict = {'a': a, 'b': b}
-
-        # 2a+b
-        model = (a_var + b_var + a_var)
-        y = model.explore_forward(input_dict)
-        assert_array_equal(y, a + a + b)
-        grad = model.explore_backward(np.ones(2))
-        assert_array_equal(grad['a'], [2])
-        assert_array_equal(grad['b'], [1])
-
-        # 2a*b
-        model = a_var * b_var * a_var
-
-        y = model.explore_forward({'a': a, 'b': b})
-        assert_array_equal(y, a * a * b)
-
-        grad = model.explore_backward(np.ones(2))
-        assert_array_equal(grad['a'], 2 * a * b)
-        assert_array_equal(grad['b'], a * a)
-
-    def test_just_numbers(self):
-        a = Var('a')
-        b = Var('b')
-        input_dict = {'a': [2.], 'b': [3.]}
-
-        model = (a + b)
-        y = model.explore_forward(input_dict)
-        assert_array_equal(y, [5])
-
-        model = (a * b)
-        y = model.explore_forward(input_dict)
-        assert_array_equal(y, [6])
-
-    def test_syntax(self):
-        var_a = Var('a')
-        var_b = Var('b')
-        a = np.array([2.3, 3., 3])
-        b = np.array([3., 5., 4])
-        input_dict = {'a': a, 'b': b}
-
-        model = Sigmoid(var_a * var_a) * (var_b * var_b * var_b + Const(2) * var_a)
-
-        y = model.explore_forward(input_dict)
-        assert_array_equal(y, Sigmoid.forward(a ** 2) * (b ** 3 + 2 * a))
-
-        grad = model.explore_backward(np.ones(3))
-        assert_array_equal(grad['a'], 2 * Sigmoid.forward(a) * (1 - a) + 2)
-        assert_array_equal(grad['b'], 3 * b * b)
+class Store(SyntaxOp):
+    def __init__(self, in_size, input):
+        SyntaxOp.__init__(self, input)
+        self.layer = layers.Store(in_size)
+        self.read_forward = self.layer.read_forward

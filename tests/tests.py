@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+# from __future__ import absolute_import
 
 import inspect
 import unittest
@@ -13,7 +13,8 @@ from loss import NLL, CrossEntropyLoss, ClaudioMaxNLL, SquaredLoss
 from lstm import LSTM
 from optim import SGD
 from network import Seq, Par, Map, Identity
-from trainers import MinibatchTrainer, SimpleTrainer
+from trainers import MinibatchTrainer, OnlineTrainer
+from utils import make_one_hot_target
 from vanilla_rnn import VanillaRNN
 
 
@@ -44,7 +45,7 @@ class LinearLayerTests(unittest.TestCase):
         dxdy = layer.backward(dJdy)
         assert_array_equal(dxdy, [3., 3.])
 
-        update_grad = layer.update_gradient(dJdy)
+        update_grad = layer.calc_update_gradient(dJdy)
         assert_array_equal(layer.W + update_grad, np.array([[4, 7, 7]]))
 
     def test_TwoNeuronsForward(self):
@@ -313,7 +314,7 @@ class NumericalGradient(unittest.TestCase):
 class CrossEntropyLossTest(unittest.TestCase):
     def test_numerical_gradient(self):
         x = np.random.rand(5)
-        target_class = CrossEntropyLoss.make_one_hot_target(classes_n=5, target_class=1)
+        target_class = make_one_hot_target(classes_n=5, target_class=1)
 
         loss = CrossEntropyLoss()
         y = loss.calc_loss(x, target_class)
@@ -373,7 +374,7 @@ class MinibatchTrainerTest(unittest.TestCase):
                                             loss=loss, epochs=epochs, optimizer=optimizer, shuffle=False)
 
         simple_model = Seq([Linear(2, 5, initialize='ones')])
-        simple_trainer = SimpleTrainer()
+        simple_trainer = OnlineTrainer()
         simple_trainer.train(simple_model, train_set, loss, epochs, optimizer)
 
         x = np.random.rand(2)
@@ -388,8 +389,8 @@ class TestNumericGradientAllLayers(unittest.TestCase):
     def test_all(self):
         # Find all classes in layers.py
         all_layers = inspect.getmembers(sys.modules['layers'], inspect.isclass)
-        excluded = ['Layer', 'Print', 'Store', 'Const', 'Linear', 'RegularizedLinear', 'Dropout', 'Sign',
-                    'Softmax', 'ClaMax']
+        excluded = ['Layer', 'Print', 'Store', 'Const', 'Linear', 'RegularizedLinear', 'Wx', 'Dropout', 'Sign',
+                    'Softmax', 'ClaMax', 'Concat', 'Sum']
 
         x = np.random.rand(3)
         for class_name, layer_class in all_layers:
@@ -477,12 +478,12 @@ class NetworkTests(unittest.TestCase):
     def test_map_mul_forward(self):
         # [a, b] => a*b
         model = Seq(Map(Identity, Identity), Mul)
-        a = np.array([2, 1])
-        b = np.array([3, 1])
+        a = np.array([2., 1])
+        b = np.array([3., 1])
         x = np.array([a, b])
         y = model.forward(x)
-        assert_array_equal(y, np.array([6, 1]))
-        grad = model.backward(np.array([1]))
+        assert_array_equal(y, np.array([6., 1.]))
+        grad = model.backward(np.array([1.]))
         assert_array_equal(grad, np.array(b, a))
 
     def test_map_mul_backward(self):
@@ -491,69 +492,29 @@ class NetworkTests(unittest.TestCase):
         b = np.array([3, 1])
         x = np.array([a, b])
         y = model.forward(x)
-        grad = model.backward(np.array(1))
+        grad = model.backward(np.ones(1))
         # grad = np.array([b, a])
         num_grad = numerical_gradient.calc(model.forward, x)
         assert_almost_equal(grad, num_grad)
 
-    def test_function(self):
-        a = np.array([2.])
-        b = np.array([3.])
 
-        # y = (a^2 + b^2)(ab + 3)
-        # dy/da = 2a*(ab+3) + b(a^2+b^2)
-        # dy/db = 2b*(ab+3) + a(a^2+b^2)
-
-        # model = Seq(
-        #     Par(
-        #         Seq(  # a*a + b*b
-        #             Map(
-        #                 Seq(Par(Identity, Identity), Mul),
-        #                 Seq(Par(Identity, Identity), Mul)),
-        #             Sum
-        #         ),
-        #         Seq(Mul, Par(Identity, Const(3)))  # a*b + 3
-        #     ),
-        #     Mul
-        # )
-        # dyda = 2 * a * (a * b + 3) + b * (a ** 2 + b ** 2)
-        # dydb = 2 * b * (a * b + 3) + a * (a ** 2 + b ** 2)
-
-        # y = a*a + b*b
-        model = Seq(
-            Map(
-                Seq(Par(Identity, Identity), Mul),
-                Seq(Par(Identity, Identity), Mul)),
-            Sum
-        )
-        dyda = 2 * a
-        dydb = 2 * b
-
-        x = np.array([a, b])
-        y = model.forward(x)
-
-        dydx = np.array([dyda, dydb])
-        num_grad = numerical_gradient.calc(model.forward, x)
-        assert_almost_equal(dydx, num_grad)
-
-
-class VanillaRNNTests(unittest.TestCase):
-    def test_forward(self):
-        model = VanillaRNN(3)
-        for i in range(3):
-            x = np.random.rand(3)
-            model.forward(x)
-            last_h = model.h_store.read()
-
-    def test_backward(self):
-        x = np.random.rand(3)
-
-        model = VanillaRNN(3)
-        model.forward(x)
-        dJdy = np.ones(3)
-        grad = model.backward(dJdy)
-
-        num_model = VanillaRNN(3)
-        num_grad = numerical_gradient.calc(num_model.forward, x)
-
-        assert_almost_equal(grad, num_grad)
+# class VanillaRNNTests(unittest.TestCase):
+#     def test_forward(self):
+#         model = VanillaRNN(3)
+#         for i in range(3):
+#             x = np.random.rand(3)
+#             model.forward(x)
+#             last_h = model.h_store.read()
+#
+#     def test_backward(self):
+#         x = np.random.rand(3)
+#
+#         model = VanillaRNN(3)
+#         model.forward(x)
+#         dJdy = np.ones(3)
+#         grad = model.backward(dJdy)
+#
+#         num_model = VanillaRNN(3)
+#         num_grad = numerical_gradient.calc(num_model.forward, x)
+#
+#         assert_almost_equal(grad, num_grad)

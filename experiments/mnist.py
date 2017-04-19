@@ -5,12 +5,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import analyser
-from layers import Linear, Softmax, Relu, RegularizedLinear
+from layers import Linear, Softmax, Relu, RegularizedLinear, Dropout
 from loss import CrossEntropyLoss
 from optim import RMSProp, MomentumSGD, AdaGrad
 from network import Seq
 from trainers import MinibatchTrainer, PatienceTrainer
-from utils import slice_percentage
+from utils import slice_percentage, make_one_hot_target
 
 
 class MnistExperiment:
@@ -33,12 +33,13 @@ class MnistExperiment:
     @staticmethod
     def make_one_hot_vectors(classes_n, train_set):
         for i, (x, target_class) in enumerate(train_set):
-            train_set[i] = (x, CrossEntropyLoss.make_one_hot_target(classes_n, target_class))
+            train_set[i] = (x, make_one_hot_target(classes_n, target_class))
 
     def run(self, batch_size=10, learning_rate=0.6, train_set_percentage=1.0, epochs=3):
-        model = Seq([
+        model = Seq(
             Linear(784, 10, initialize='random'),
-        ])
+            # Dropout(0.5)
+        )
 
         train_set_sliced = slice_percentage(self.train_set, train_set_percentage)
 
@@ -49,11 +50,11 @@ class MnistExperiment:
                                   loss=CrossEntropyLoss(),
                                   epochs=epochs,
                                   optimizer=MomentumSGD(learning_rate=learning_rate, momentum=0.5),
-                                  # optimizer=RMSProp(learning_rate=learning_rate, decay_rate=0.9),
+                                  # optimizer=RMSProp(learning_rate=learning_rate, decay_rate=0.6),
                                   # optimizer=AdaGrad(learning_rate=learning_rate),
                                   show_progress=True)
 
-        self.show_mnist_grid(model, self.test_set)
+        # self.show_mnist_grid(model, self.test_set)
 
         # trainer = PatienceTrainer()
         # trainer.train(model,
@@ -99,5 +100,6 @@ class MnistExperiment:
 
 experiment = MnistExperiment()
 results = analyser.analyse(experiment.run,
-                           learning_rate=[0.1], batch_size=60, epochs=[20], train_set_percentage=1)
+                           learning_rate=[0.01], batch_size=60, epochs=[5],
+                           train_set_percentage=[1])
 analyser.plot_analyser_results(results)

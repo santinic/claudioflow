@@ -1,4 +1,3 @@
-import unittest
 from itertools import izip
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,9 +6,10 @@ from sklearn import datasets
 from layers import Linear, Sigmoid, Softmax, Dropout, Relu, Tanh, RegularizedLinear, \
     CheapTanh
 from loss import SquaredLoss, CrossEntropyLoss, ClaudioMaxNLL, NLL
+from normalize import normalize
 from optim import RMSProp, AdaGrad, MomentumSGD, SGD
 from network import Seq
-from trainers import PatienceTrainer, MinibatchTrainer, SimpleTrainer
+from trainers import PatienceTrainer, MinibatchTrainer, OnlineTrainer
 from utils import chunks, partition, to_one_hot_vector_targets
 
 
@@ -27,6 +27,10 @@ def gen_data(n=300, dataset='clusters'):
     train_data, valid_data, test_data = partition(data, 3)
     train_targets, valid_targets, test_targets = partition(targets, 3)
 
+    train_data = normalize(train_data)
+    test_data = normalize(test_data)
+    valid_data = normalize(valid_data)
+
     train_set = to_one_hot_vector_targets(classes_n, zip(train_data, train_targets))
     valid_set = to_one_hot_vector_targets(classes_n, zip(valid_data, valid_targets))
     test_set = to_one_hot_vector_targets(classes_n, zip(test_data, test_targets))
@@ -36,6 +40,8 @@ def gen_data(n=300, dataset='clusters'):
 
 def scatter_train_data(train_set):
     plt.figure(1)
+    plt.xlim(-1, 1)
+    plt.ylim(-1, 1)
     markers = ['o', 'x', 'v', 's']
     for class_int, marker in enumerate(markers):
         x = [point[0] for point, t in train_set if np.argmax(t) == class_int]
@@ -45,6 +51,8 @@ def scatter_train_data(train_set):
 
 def scatter_test_data(data, target, model):
     plt.figure(1)
+    plt.xlim(-1, 1)
+    plt.ylim(-1, 1)
     colors = ['r', 'g', 'b', 'y', 'o']
     color = lambda t: colors[t]
 
@@ -52,7 +60,6 @@ def scatter_test_data(data, target, model):
         y = model.forward(x)
         target_class = np.argmax(y)
         plt.scatter(x[0], x[1], s=100, c=color(target_class))
-
 
 def predict(model, xs):
     ys = model.forward_all(xs)
@@ -84,12 +91,14 @@ class PerceptronExperiment:
     def run(self):
         train_set, valid_set, test_set = gen_data(dataset='circles')
 
-        l1 = 0.001
-        l2 = 0.001
+        l1 = 0.
+        l2 = 0.
         model = Seq([
-            Linear(2, 10),
+            RegularizedLinear(2, 100, l1=l1, l2=l2),
+            # Dropout(0.8),
             Tanh(),
-            Linear(10, 4),
+            RegularizedLinear(100, 4, l1=l1, l2=l2),
+            # Dropout(0.8)
         ])
 
         # trainer = SimpleTrainer()
@@ -102,11 +111,16 @@ class PerceptronExperiment:
         #               epochs=100)
 
         trainer = MinibatchTrainer()
+        batch_size = 40
+        batches_n = (float(len(train_set)) / batch_size)
+        learning_rate = 0.1 / batches_n
+        # print learning_rate
         mean_losses = trainer.train_minibatches(model, train_set,
-                                                batch_size=1,
+                                                batch_size,
                                                 epochs=200,
                                                 loss=CrossEntropyLoss(),
-                                                optimizer=MomentumSGD(learning_rate=0.1))
+                                                optimizer=MomentumSGD(learning_rate, momentum=0.4),
+                                                show_progress=True)
 
         # trainer = PatienceTrainer()
         # mean_losses = trainer.train(model, train_set, valid_set, test_set,
@@ -119,7 +133,7 @@ class PerceptronExperiment:
         draw_decision_surface(model)
         scatter_train_data(train_set)
 
-        plot_mean_loss(mean_losses)
+        # plot_mean_loss(mean_losses)
         plt.show()
 
 

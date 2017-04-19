@@ -8,7 +8,7 @@ from layers import Linear, Sigmoid
 from loss import SquaredLoss
 from optim import RMSProp, AdaGrad, MomentumSGD, SGD
 from network import Seq
-from trainers import SimpleTrainer
+from trainers import OnlineTrainer
 
 OUTPUT_A = 1.
 OUTPUT_B = 0.
@@ -70,7 +70,7 @@ class Perceptron(unittest.TestCase):
             Sigmoid(),
         ])
 
-        SimpleTrainer().train(model,
+        OnlineTrainer().train(model,
                               train_set=train_set,
                               loss=SquaredLoss(),
                               # optimizer=SGD(learning_rate=0.1),

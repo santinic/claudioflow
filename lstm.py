@@ -1,10 +1,12 @@
+import unittest
+
 import numpy as np
 
-from layers import Linear, Sigmoid, Tanh, Const, Store
-from network import Seq, Par
+from network import Layer
+from syntax import Sigmoid, Linear, Tanh, Var
 
 
-class LSTM:
+class LSTM(Layer):
     """
     Implements traditional Long Short Term Memory as described here (variable names should match):
     http://colah.github.io/posts/2015-08-Understanding-LSTMs/
@@ -14,28 +16,35 @@ class LSTM:
     """
 
     def __init__(self, in_size, out_size):
+        x_and_h = Var("x_and_h")
+        last_C = Var("last_C")
 
-        # self.C_store = Store(in_size)
+        f = Sigmoid(Linear(in_size, out_size, input=x_and_h))
+        i = Sigmoid(Linear(in_size, out_size, input=x_and_h))
+        C_tilde = Tanh(Linear(in_size, out_size, input=x_and_h))
+        o = Sigmoid(Linear(in_size, out_size, input=x_and_h))
 
-        f =         Seq(Linear(in_size, out_size), Sigmoid)
-        i =         Seq(Linear(in_size, out_size), Sigmoid)
-        C_tilde =   Seq(Linear(in_size, out_size), Tanh)
-        o =         Seq(Linear(in_size, out_size), Sigmoid)
+        fxC = f * last_C
+        ixC_tilde = i * C_tilde
+        C = fxC + ixC_tilde
+        h = o * Tanh(C)
 
-        fxC =       Seq(Par(f, Const(self.last_C)), Mul)
-        # ixC_tilde = Mul(i, C_tilde)
-        # C =         Sum(fxC, ixC_tilde)
-        # h =         Mul(o, Seq(C, Tanh))
-
-        self.C = C
-        self.h = h
+        print 'h = ', h
+        print 'C = ', C
+        print 'C_tilde = ', C_tilde
 
     def forward(self, x):
         x_and_h = np.hstack([x, self.last_h])
 
-        self.last_C = self.C.forward(x_and_h)
+        # self.last_C = self.C.forward_variables({ 'x_and_h': x_and_h })
 
-        return self.h.forward(x_and_h)
+        return self.h.forward_variables({ 'x_and_h': x_and_h })
 
     def backward(self, dJdy):
         return self.h.backward(dJdy)
+
+
+class LSTMTest(unittest.TestCase):
+    def test_init(self):
+        model = LSTM(2, 3)
+
