@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from network import Layer
-from syntax import Var, Linear, Tanh
+from syntax import Var, Wx, Tanh
 
 
 class VanillaRNN(Layer):
@@ -22,9 +22,9 @@ class VanillaRNN(Layer):
         self.delta_h_previous = np.zeros(hidden_size)
         self.reset_h()
 
-        self.Wxh = Linear(in_size, hidden_size, input=Var('x_t'))
-        self.Whh = Linear(hidden_size, hidden_size, input=Var('last_h'))
-        self.Why = Linear(hidden_size, out_size, input=Var('h_t'))
+        self.Wxh = Wx(in_size, hidden_size, input=Var('x_t'))
+        self.Whh = Wx(hidden_size, hidden_size, input=Var('last_h'))
+        self.Why = Wx(hidden_size, out_size, input=Var('h_t'))
         self.h = Tanh(self.Wxh + self.Whh)
         self.y = self.Why
 

@@ -4,6 +4,7 @@ from layers import Softmax
 from loss import CrossEntropyLoss
 from optim import RMSProp, SGD
 from trainers import MinibatchTrainer
+from utils import sliding_window
 from vanilla_rnn import VanillaRNN
 
 data = open('input.txt', 'r').read()
@@ -59,54 +60,48 @@ def sample_and_print(rnn, seed_ix, n=100):
 
 in_size = vocab_size
 out_size = vocab_size
-hidden_size = 100
-seq_length = 4
+hidden_size = 20
+seq_length = 10
 vanilla_rnn = VanillaRNN(in_size, out_size, hidden_size)
 
 loss = CrossEntropyLoss()
-optimizer = SGD(learning_rate=0.1)
+optimizer = SGD(learning_rate=0.01)
 
 iter = 0
 while True:
-    print('iter = %d' % iter)
-    # print('        %d:%d' % (iter, iter + seq_length))
-    inputs = [char_to_ix[ch] for ch in data[iter : iter + seq_length]]
-    targets = [char_to_ix[ch] for ch in data[iter + 1 : iter + seq_length + 1]]
+    for x_str, target_str in sliding_window(data, seq_length, step=1):
+        # print x_str, target_str
+        inputs = [char_to_ix[ch] for ch in x_str]
+        targets = [char_to_ix[ch] for ch in target_str]
 
-    input_ch = ''.join([ix_to_char[iter] for iter in inputs])
-    target_ch = ''.join([ix_to_char[iter] for iter in targets])
-    print('         %s -> %s' % (input_ch, target_ch))
+        # input_ch = ''.join([ix_to_char[iter] for iter in inputs])
+        # target_ch = ''.join([ix_to_char[iter] for iter in targets])
+        # print('%s -> %s' % (input_ch, target_ch))
 
-    # if len(inputs) != len(targets):
-    #     print("DIVERSI", input_ch, target_ch)
-    #     n = 0
-    #     continue
+        inputs_one_hot = [one_hot(x) for x in inputs]
+        targets_one_hot = [one_hot(t) for t in targets]
 
-    inputs_one_hot = [one_hot(x) for x in inputs]
-    targets_one_hot = [one_hot(t) for t in targets]
+        window = zip(inputs_one_hot, targets_one_hot)
 
-    window = zip(inputs_one_hot, targets_one_hot)
+        loss_sum = 0.
+        for x, target in window:
+            y = vanilla_rnn.forward(x, is_training=True)
+            J = loss.calc_loss(y, target)
+            dJdy = loss.calc_gradient(y, target)
+            loss_sum += J
+        mean_losses = loss_sum / seq_length
+        batch_mean_loss = np.mean(mean_losses)
+        # print('batch mean J %f' % batch_mean_loss)
 
-    loss_sum = 0.
-    for x, target in window:
-        y = vanilla_rnn.forward(x, is_training=True)
-        J = loss.calc_loss(y, target)
-        dJdy = loss.calc_gradient(y, target)
-        loss_sum += J
-    mean_losses = loss_sum / seq_length
-    batch_mean_loss = np.mean(mean_losses)
-    # print('batch mean J %f' % batch_mean_loss)
+        dhnext = np.zeros(hidden_size)
+        for x, target in reversed(window):
+            dhnext = vanilla_rnn.backward_through_time(dJdy, dhnext)
 
-    dhnext = np.zeros(hidden_size)
-    for x, target in reversed(window):
-        dhnext = vanilla_rnn.backward_through_time(dJdy, dhnext)
+        vanilla_rnn.clip()
+        vanilla_rnn.update_weights(optimizer)
+        vanilla_rnn.reset_h()
 
-    vanilla_rnn.clip()
-    vanilla_rnn.update_weights(optimizer)
-    # vanilla_rnn.reset_h()
+        if iter % 300 == 0:
+            sample_and_print(vanilla_rnn, inputs[0])
 
-    # if iter % 100 == 0:
-    #     sample_and_print(vanilla_rnn, inputs[0])
-
-    # n = (n+1) % data_len
-
+        iter += 1

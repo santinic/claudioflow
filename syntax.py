@@ -116,6 +116,12 @@ class Linear(SyntaxOp):
         self.layer = layers.Linear(in_size, out_size, initialize, dtype)
 
 
+class Wx(SyntaxOp):
+    def __init__(self, in_size, out_size, initialize='random', input=None):
+        SyntaxOp.__init__(self, input)
+        self.layer = layers.Wx(in_size, out_size, initialize)
+
+
 class Tanh(SyntaxOp):
     layer = layers.Tanh()
 

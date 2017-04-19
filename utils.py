@@ -41,9 +41,16 @@ def to_one_hot_vector_targets(classes_n, train_set):
     return [(x, make_one_hot_target(classes_n, t)) for x, t in train_set]
 
 
-def sliding_window(seq, window_size, step_size=1):
+def sliding_window(seq, window_size, step=1):
     seq_len = len(seq)
+    p = 0
     while True:
-        yield seq[p:p + window_size], seq[p + step_size:p + window_size + step_size]
+        x = seq[p:p + window_size]
+        t = seq[p + step:p + window_size + step]
+        if len(x) != len(t):
+            p = 0
+            continue
+
+        yield x, t
         p = (p + 1) % seq_len
 

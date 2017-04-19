@@ -5,17 +5,15 @@ import unittest
 
 import numpy as np
 import sys
-from numpy.testing import assert_array_equal, assert_almost_equal
+from numpy.testing import assert_array_equal, assert_almost_equal, assert_array_almost_equal
 
-from layers import Linear, Softmax, Sigmoid, Sign, Relu, Tanh, CheapTanh, Const, Mul, Sum
+from layers import Linear, Softmax, Sigmoid, Sign, Relu, Tanh, CheapTanh, Const, Mul, Sum, Wx
 import numerical_gradient
 from loss import NLL, CrossEntropyLoss, ClaudioMaxNLL, SquaredLoss
-from lstm import LSTM
 from optim import SGD
 from network import Seq, Par, Map, Identity
 from trainers import MinibatchTrainer, OnlineTrainer
 from utils import make_one_hot_target
-from vanilla_rnn import VanillaRNN
 
 
 class LinearLayerTests(unittest.TestCase):
@@ -89,6 +87,14 @@ class LinearLayerTests(unittest.TestCase):
 
         assert_array_equal(yNone, y64)
         self.assertFalse(np.array_equal(y16, y64))
+
+    def test_wx_numerical_grad(self):
+        x = np.random.rand(3)
+        wx = Wx(3, 5, initialize='ones')
+        y = wx.forward(x)
+        deriv_grad = wx.backward(np.ones(5))
+        num_grad = numerical_gradient.calc(wx.forward, x)
+        assert_array_almost_equal(deriv_grad, np.sum(num_grad, axis=0))
 
 
 class SigmoidLayerTests(unittest.TestCase):
