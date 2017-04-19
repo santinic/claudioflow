@@ -22,9 +22,10 @@ class VanillaRNN(Layer):
         self.delta_h_previous = np.zeros(hidden_size)
         self.reset_h()
 
-        self.Wxh = Wx(in_size, hidden_size, input=Var('x_t'))
-        self.Whh = Wx(hidden_size, hidden_size, input=Var('last_h'))
-        self.Why = Wx(hidden_size, out_size, input=Var('h_t'))
+        initialize = 'random'
+        self.Wxh = Wx(in_size, hidden_size, initialize, input=Var('x_t'))
+        self.Whh = Wx(hidden_size, hidden_size, initialize, input=Var('last_h'))
+        self.Why = Wx(hidden_size, out_size, initialize, input=Var('h_t'))
         self.h = Tanh(self.Wxh + self.Whh)
         self.y = self.Why
 
