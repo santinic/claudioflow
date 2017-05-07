@@ -49,8 +49,9 @@ def sliding_window(seq, window_size, step=1):
         t = seq[p + step:p + window_size + step]
         if len(x) != len(t):
             p = 0
-            continue
+            return
 
         yield x, t
         p = (p + 1) % seq_len
+
 

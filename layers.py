@@ -1,6 +1,6 @@
 import numpy as np
 
-from network import Layer
+from network import Layer, Seq
 from utils import split_array_into_variable_sizes
 
 
@@ -12,8 +12,12 @@ class Linear(object):
 
         self.delta_W = np.zeros([out_size, in_size + 1], dtype=dtype)
 
-        if initialize == 'random':
+        if type(initialize) is not str:
+            self.W = initialize
+        elif initialize == 'random':
             self.W = np.random.rand(out_size, in_size + 1).astype(dtype)
+        elif initialize == 'randn':
+            self.W = np.random.randn(out_size, in_size + 1)
         elif initialize == 'ones':
             self.W = np.ones([out_size, in_size + 1], dtype=dtype)
         elif initialize == 'zeros':
@@ -40,7 +44,8 @@ class Linear(object):
     def update_weights(self, optimizer):
         optimizer.update(self, self.delta_W)
         # reset delta_W
-        self.delta_W = np.zeros(self.W.shape)
+        # self.delta_W = np.zeros(self.W.shape)
+        self.delta_W.fill(0.)
 
     def check_first_x_dtype(self, x):
         if self.first_x_already_checked:
@@ -66,28 +71,119 @@ class RegularizedLinear(Linear):
         return grad + l1_reg + l2_reg
 
 
-class Wx(Linear):
-    def __init__(self, in_size, out_size, initialize='random'):
-        if initialize == 'random':
+class MatrixWeight:
+    def __init__(self, in_size=None, out_size=None, initialize=None):
+        assert type(initialize) == str or type(initialize) == np.ndarray or \
+               type(initialize) == np.matrixlib.defmatrix.matrix, \
+            "%s" % type(initialize)
+
+
+        if type(initialize) is not str:
+            self.W = initialize
+        elif initialize == 'random':
             self.W = np.random.rand(out_size, in_size)
+        elif initialize == 'randn':
+            self.W = np.random.randn(out_size, in_size)
         elif initialize == 'ones':
             self.W = np.ones([out_size, in_size])
         elif initialize == 'zeros':
             self.W = np.zeros([out_size, in_size])
+        else:
+            raise Exception("Unrecognized initialization value")
 
-        self.delta_W = np.zeros(self.W.shape)
+        assert isinstance(self.W, np.ndarray)
+        self.delta = np.zeros_like(self.W)
+
+    def get(self):
+        return self.W
+
+    def get_delta(self):
+        return self.delta
+
+
+class Wx(Linear):
+    def __init__(self, in_size, out_size, initialize='random'):
+        if isinstance(initialize, MatrixWeight):
+            self.W = initialize
+        elif isinstance(initialize, str):
+            self.W = MatrixWeight(in_size, out_size, initialize)
+        else:
+            raise Exception("Unrecognized initialization value")
+
+        # print('Wx initialized with', self.W.get())
 
     def forward(self, x, is_training=False):
         self.x = x
-        return self.W.dot(x)
+        return self.W.get().dot(x)
 
     def backward(self, dJdy):
-        self.delta_W += self.calc_update_gradient(dJdy)
-        return self.W.T.dot(dJdy)
+        self.W.delta += self.calc_update_gradient(dJdy)
+        return self.W.get().T.dot(dJdy)
 
     def update_weights(self, optimizer):
-        optimizer.update(self, self.delta_W)
-        self.delta_W = np.zeros(self.W.shape)
+        optimizer.update(self.W, self.W.delta)
+        self.W.delta.fill(0.)
+
+
+class VectorWeight:
+    def __init__(self, in_size, initialize):
+        assert type(in_size) == int
+
+        if type(initialize) is not str:
+            self.W = initialize
+        elif initialize == 'random':
+            self.W = np.random.rand(in_size)
+        elif initialize == 'randn':
+            self.W = np.random.randn(in_size)
+        elif initialize == 'ones':
+            self.W = np.ones(in_size)
+        elif initialize == 'zeros':
+            self.W = np.zeros(in_size)
+        else:
+            raise Exception("Unrecognized initialization value")
+
+        self.delta = np.zeros_like(self.W)
+
+    def get(self):
+        return self.W
+
+    def get_delta(self):
+        return self.delta
+
+
+class PlusBias(Layer):
+    def __init__(self, in_size, initialize='random'):
+        if isinstance(initialize, VectorWeight):
+            self.b = initialize
+        else:
+            self.b = VectorWeight(in_size, initialize)
+
+    def forward(self, x, is_training=False):
+        return x + self.b.get()
+
+    def backward(self, dJdy):
+        self.b.delta += dJdy
+        return dJdy
+
+    def update_weights(self, optimizer):
+        optimizer.update(self.b, self.b.delta)
+        self.b.delta.fill(0.)
+
+
+class WxBiasLinear(Layer):
+    def __init__(self, in_size, out_size, initialize_W, initialize_b):
+        self.Wx = Wx(in_size, out_size, initialize_W)
+        self.bias = PlusBias(out_size, initialize_b)
+        self.model = Seq(self.Wx, self.bias)
+
+    def forward(self, x, is_training=False):
+        return self.model.forward(x, is_training)
+
+    def backward(self, dJdy):
+        return self.model.backward(dJdy)
+
+    def update_weights(self, optimizer):
+        return self.model.update_weights(optimizer)
 
 
 class Sigmoid(Layer):
@@ -126,9 +222,11 @@ class Relu(Layer):
 class Tanh(Layer):
     def forward(self, x, is_training=False):
         self.y = np.tanh(x)
+        # print('-> Tanh %d registers' % id(self), self.y)
         return self.y
 
     def backward(self, dJdy):
+        # print('<- Tanh %d backward with ' % id(self), self.y, dJdy)
         return (1. - self.y ** 2) * dJdy
 
 
@@ -226,14 +324,23 @@ class Sum(Layer):
     backward: [dJdy, dJdy, dJdy]
     '''
 
-    def forward(self, x, is_training=False):
-        self.size_of_x = x.size
-        y = np.sum(x, axis=0)
-        self.size_of_y = y.size
+    def forward(self, xs, is_training=False):
+        self.elements = xs.shape[0]
+        self.vector_size = xs.shape[1]
+        y = np.sum(xs, axis=0)
         return y
 
     def backward(self, dJdy):
-        return dJdy * np.ones(self.size_of_y)
+        assert dJdy.shape[0] == self.vector_size, "backward dJdy size is not compatible with previous x vector size"
+        return [dJdy] * self.elements
+
+
+class Neg(Layer):
+    def forward(self, x, is_training=False):
+        return -x
+
+    def backward(self, dJdy):
+        return -dJdy
 
 
 class Mul(Layer):
@@ -277,8 +384,8 @@ class Store(Layer):
     def read_forward(self):
         return self.x
 
-    # def read_backward(self):
-    #     return self.grad
+        # def read_backward(self):
+        #     return self.grad
 
 
 class Concat(Layer):
@@ -307,3 +414,17 @@ class Print(Layer):
         else:
             print(dJdy)
         return dJdy
+
+
+class SyntaxLayer(Layer):
+    def __init__(self, expr):
+        self.model = expr
+
+    def forward(self, x, is_training=False):
+        return self.model.forward_variables({'x': x})
+
+    def backward(self, dJdy):
+        return self.model.backward_variables(dJdy)['x']
+
+    def update_weights(self, optimizer):
+        return self.model.update_weights(optimizer)

@@ -16,11 +16,13 @@ class SquaredLoss:
 
 class NegLogLikelihoodLoss:
     def calc_loss(self, y, target):
-        J = - target * np.log(y)
+        # J = - target * np.log(y)
+        J = - target * np.log(np.maximum(y, 0.0000001))
         return J
 
     def calc_gradient(self, y, target):
-        return - target / y
+        # return - target / y
+        return -target / np.maximum(y,0.0000001)
 
 
 class CrossEntropyLoss:

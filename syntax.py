@@ -9,9 +9,11 @@ class SyntaxOp:
     def __add__(self, other):
         return Sum(self, other)
 
+    def __neg__(self):
+        return Neg(self)
+
     def __sub__(self, other):
-        raise Exception("Subtraction not implemented")
-        # return Sub(self, other)
+        return Sum(self, -other)
 
     def __mul__(self, other):
         return Mul(self, other)
@@ -34,15 +36,17 @@ class SyntaxOp:
         for input_op in self.inputs:
             val = input_op.forward_variables(input_dict, depth + 1, debug)
             values.append(val)
-            if debug:
-                print('%s%s -> %s' % ('\t' * depth, input_op, val))
+            # if debug:
+            #     print('%s%s -> %s' % ('\t' * (depth+1), input_op, val))
         x = values[0] if len(values) == 1 else values
         y = self.layer_forward(np.array(x))
+        if debug:
+            print('%s%s -> %s' % ('\t' * depth, self, y))
         return y
 
     def backward_variables(self, deltas, depth=0, debug=False):
         if debug:
-            print('%s%s <- deltas=%s' % ('\t' * depth, self, deltas))
+            print('%s%s <- deltas %s' % ('\t' * depth, self, deltas))
         deltas = self.layer_backward(deltas)
         if len(self.inputs) == 1:
             return self.inputs[0].backward_variables(deltas, depth + 1, debug)
@@ -50,27 +54,28 @@ class SyntaxOp:
             ret_deltas = []
             for input_op, dJdy in zip(self.inputs, deltas):
                 delta = input_op.backward_variables(dJdy, depth + 1, debug)
-                ret_deltas.append(delta)
+                if delta is not None:
+                    ret_deltas.append(delta)
         merged = self.merge_backprop_dicts(ret_deltas)
         return merged
 
     def update_weights(self, optimizer, depth=0, debug=False):
         if debug:
             print('%s%s' % ('\t' * depth, self))
-
         self.layer_update_weights(optimizer)
         for input in self.inputs:
             input.update_weights(optimizer, depth + 1, debug)
 
     @staticmethod
     def merge_backprop_dicts(dicts):
-        merged = dicts[0]
-        for dict in dicts[1:]:
-            for k, v in dict.iteritems():
+        merged = {}
+        for d in dicts:
+            for k, v in d.iteritems():
                 if k in merged:
                     merged[k] += v
                 else:
-                    merged[k] = v
+                    # very important to copy the object, not just point to it
+                    merged[k] = np.copy(v)
         return merged
 
     def layer_forward(self, values):
@@ -93,6 +98,8 @@ class Var(SyntaxOp):
         return val
 
     def backward_variables(self, deltas, depth, debug):
+        if debug:
+            print('%sVar(%s) <- deltas %s' % ('\t' * depth, self.variable_name, deltas))
         grad_dict = {}
         grad_dict[self.variable_name] = deltas
         return grad_dict
@@ -100,8 +107,8 @@ class Var(SyntaxOp):
     def layer_forward(self, values):
         return values
 
-    def layer_backward(self, dJdy):
-        return dJdy
+    # def layer_backward(self, dJdy):
+    #     return dJdy
 
     def layer_update_weights(self, optimizer):
         return
@@ -116,18 +123,40 @@ class Linear(SyntaxOp):
         self.layer = layers.Linear(in_size, out_size, initialize, dtype)
 
 
+class WxBiasLinear(SyntaxOp):
+    def __init__(self, in_size, out_size, initialize_W, initialize_b, input=None):
+        SyntaxOp.__init__(self, input)
+        self.layer = layers.WxBiasLinear(in_size, out_size, initialize_W, initialize_b)
+
+
 class Wx(SyntaxOp):
     def __init__(self, in_size, out_size, initialize='random', input=None):
         SyntaxOp.__init__(self, input)
         self.layer = layers.Wx(in_size, out_size, initialize)
 
 
+class PlusBias(SyntaxOp):
+    def __init__(self, in_size, initialize='random', input=None):
+        SyntaxOp.__init__(self, input)
+        self.layer = layers.PlusBias(in_size, initialize)
+
+
 class Tanh(SyntaxOp):
-    layer = layers.Tanh()
+    def __init__(self, *args):
+        self.layer = layers.Tanh()
+        self.inputs = args
+
+
+class Softmax(SyntaxOp):
+    def __init__(self, *args):
+        self.layer = layers.Softmax()
+        self.inputs = args
 
 
 class Sigmoid(SyntaxOp):
-    layer = layers.Sigmoid()
+    def __init__(self, *args):
+        self.layer = layers.Sigmoid()
+        self.inputs = args
 
 
 class Sum(SyntaxOp):
@@ -135,6 +164,10 @@ class Sum(SyntaxOp):
         self.layer = layers.Sum()
         self.inputs = args
 
+class Neg(SyntaxOp):
+    def __init__(self, *args):
+        self.layer = layers.Neg()
+        self.inputs = args
 
 class Mul(SyntaxOp):
     def __init__(self, *args):
@@ -151,11 +184,17 @@ class Concat(SyntaxOp):
 class Const(SyntaxOp):
     def __init__(self, const):
         SyntaxOp.__init__(self)
-        self.const = const
+        self.const = np.array([const])
         self.inputs = []
 
-    def layer_forward(self, x):
-        return np.array([self.const])
+    def forward_variables(self, input_dict, depth, debug):
+        return self.const
+
+    def backward_variables(self, deltas, depth, debug):
+        pass
+
+    def update_weights(self, optimizer, depth=0, debug=False):
+        pass
 
 
 class Store(SyntaxOp):

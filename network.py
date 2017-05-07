@@ -8,6 +8,9 @@ class Layer:
     def update_weights(self, optimizer):
         return
 
+    def forward_all(self, xs, is_training=False):
+        return map(lambda x: self.forward(x, is_training), xs)
+
 
 class Serializable:
     def save_to_file(self, file_name):
@@ -59,9 +62,6 @@ class Seq(Layer, WithLayers, Serializable):
         for layer in reversed(self.layers):
             delta = layer.update_weights(optimizer)
         return delta
-
-    def forward_all(self, xs, is_training=False):
-        return map(lambda x: self.forward(x, is_training), xs)
 
     def validate_input_data(self, x):
         if type(x) == list:

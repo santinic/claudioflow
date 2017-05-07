@@ -52,4 +52,3 @@ class RMSProp:
         layer.r = (self.decay_rate * layer.r) + (1. - self.decay_rate) * squared_grad
         left = - self.learning_rate / np.sqrt(self.delta_const + layer.r)
         layer.W += np.multiply(left, grad)
-

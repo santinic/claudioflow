@@ -3,14 +3,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn import datasets
 
+import syntax
 from layers import Linear, Sigmoid, Softmax, Dropout, Relu, Tanh, RegularizedLinear, \
-    CheapTanh
+    CheapTanh, SyntaxLayer
 from loss import SquaredLoss, CrossEntropyLoss, ClaudioMaxNLL, NLL
 from normalize import normalize
 from optim import RMSProp, AdaGrad, MomentumSGD, SGD
 from network import Seq
 from trainers import PatienceTrainer, MinibatchTrainer, OnlineTrainer
 from utils import chunks, partition, to_one_hot_vector_targets
+
+from layers import WxBiasLinear as Linear
 
 
 def gen_data(n=300, dataset='clusters'):
@@ -93,13 +96,18 @@ class PerceptronExperiment:
 
         l1 = 0.
         l2 = 0.
-        model = Seq([
-            RegularizedLinear(2, 100, l1=l1, l2=l2),
-            # Dropout(0.8),
-            Tanh(),
-            RegularizedLinear(100, 4, l1=l1, l2=l2),
-            # Dropout(0.8)
-        ])
+        # model = Seq([
+        #     Linear(2, 100),
+        #     # Dropout(0.8),
+        #     Tanh(),
+        #     Linear(100, 4),
+        #     # Tanh(),
+        #     # Dropout(0.6)
+        # ])
+
+        model = SyntaxLayer(
+            syntax.Linear(10, 4, input=
+                syntax.Tanh(syntax.Linear(2, 10, input=syntax.Var('x')))))
 
         # trainer = SimpleTrainer()
         # trainer.train(model, train_set,
@@ -117,7 +125,7 @@ class PerceptronExperiment:
         # print learning_rate
         mean_losses = trainer.train_minibatches(model, train_set,
                                                 batch_size,
-                                                epochs=200,
+                                                epochs=100,
                                                 loss=CrossEntropyLoss(),
                                                 optimizer=MomentumSGD(learning_rate, momentum=0.4),
                                                 show_progress=True)
@@ -133,7 +141,7 @@ class PerceptronExperiment:
         draw_decision_surface(model)
         scatter_train_data(train_set)
 
-        # plot_mean_loss(mean_losses)
+        plot_mean_loss(mean_losses)
         plt.show()
 
 

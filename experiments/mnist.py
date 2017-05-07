@@ -5,9 +5,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import analyser
-from layers import Linear, Softmax, Relu, RegularizedLinear, Dropout
+from layers import Linear, Softmax, Relu, RegularizedLinear, Dropout, WxBiasLinear
 from loss import CrossEntropyLoss
-from optim import RMSProp, MomentumSGD, AdaGrad
+from optim import RMSProp, MomentumSGD, AdaGrad, SGD
 from network import Seq
 from trainers import MinibatchTrainer, PatienceTrainer
 from utils import slice_percentage, make_one_hot_target
@@ -37,7 +37,7 @@ class MnistExperiment:
 
     def run(self, batch_size=10, learning_rate=0.6, train_set_percentage=1.0, epochs=3):
         model = Seq(
-            Linear(784, 10, initialize='random'),
+            WxBiasLinear(784, 10, initialize='random')
             # Dropout(0.5)
         )
 
@@ -49,7 +49,7 @@ class MnistExperiment:
                                   batch_size=batch_size,
                                   loss=CrossEntropyLoss(),
                                   epochs=epochs,
-                                  optimizer=MomentumSGD(learning_rate=learning_rate, momentum=0.5),
+                                  optimizer=SGD(learning_rate=learning_rate),
                                   # optimizer=RMSProp(learning_rate=learning_rate, decay_rate=0.6),
                                   # optimizer=AdaGrad(learning_rate=learning_rate),
                                   show_progress=True)

@@ -7,13 +7,17 @@ import numpy as np
 import sys
 from numpy.testing import assert_array_equal, assert_almost_equal, assert_array_almost_equal
 
-from layers import Linear, Softmax, Sigmoid, Sign, Relu, Tanh, CheapTanh, Const, Mul, Sum, Wx
+from layers import Softmax, Sigmoid, Sign, Relu, Tanh, CheapTanh, Const, Mul, Sum, Wx, PlusBias, WxBiasLinear, Print, \
+    MatrixWeight
 import numerical_gradient
 from loss import NLL, CrossEntropyLoss, ClaudioMaxNLL, SquaredLoss
 from optim import SGD
 from network import Seq, Par, Map, Identity
 from trainers import MinibatchTrainer, OnlineTrainer
 from utils import make_one_hot_target
+
+# from layers import WxBiasLinear as Linear
+from layers import Linear
 
 
 class LinearLayerTests(unittest.TestCase):
@@ -88,6 +92,15 @@ class LinearLayerTests(unittest.TestCase):
         assert_array_equal(yNone, y64)
         self.assertFalse(np.array_equal(y16, y64))
 
+    def test_initialize_with_value(self):
+        W = np.matrix('1 2 3; 4 5 6')
+        x = np.random.rand(2)
+        layer = Linear(2000, 2000, initialize=W)
+        y = layer.forward(x)
+        assert_array_equal(y, W.dot(np.hstack([1, x])))
+
+
+class WxTests(unittest.TestCase):
     def test_wx_numerical_grad(self):
         x = np.random.rand(3)
         wx = Wx(3, 5, initialize='ones')
@@ -95,6 +108,43 @@ class LinearLayerTests(unittest.TestCase):
         deriv_grad = wx.backward(np.ones(5))
         num_grad = numerical_gradient.calc(wx.forward, x)
         assert_array_almost_equal(deriv_grad, np.sum(num_grad, axis=0))
+
+    def test_wx_initialize_with_value(self):
+        W = MatrixWeight(2, 2, np.matrix('1 2; 3 4'))
+        x = np.random.rand(2)
+        layer = Wx(2000, 2000, initialize=W)
+        y = layer.forward(x)
+        assert_array_equal(y, W.get().dot(x))
+
+
+class WxPlusBiasTests(unittest.TestCase):
+    def test_compare_with_Linear(self):
+        in_size = 2
+        out_size = 3
+        x = np.random.rand(in_size)
+        # x = np.array([1., 1])
+        optimizer = SGD(0.1)
+
+        linear = Linear(in_size, out_size, initialize='zeros')
+
+        wx = Wx(in_size, out_size, initialize='zeros')
+        plusbias = PlusBias(out_size, initialize='zeros')
+        wxbias = Seq(wx, plusbias)
+
+        linear_y = linear.forward(x)
+        wxbias_y = wxbias.forward(x)
+        assert_array_equal(linear_y, wxbias_y)
+
+        dJdy = np.random.rand(out_size)
+        linear_grad = linear.backward(dJdy)
+        wxbias_grad = wxbias.backward(dJdy)
+        assert_array_equal(linear_grad, wxbias_grad)
+
+        linear.update_weights(optimizer)
+        wxbias.update_weights(optimizer)
+
+        stack = np.vstack([plusbias.b.get(), wx.W.get().T]).T
+        assert_array_equal(linear.W, stack)
 
 
 class SigmoidLayerTests(unittest.TestCase):
@@ -122,11 +172,11 @@ class TwoLinearLayersTests(unittest.TestCase):
     def test_Expand(self):
         model = Seq([
             Linear(2, 3, initialize='ones'),
-            Linear(3, 1, initialize='ones')
+            Linear(3, 2, initialize='ones'),
         ])
         x = np.random.rand(2)
         model.forward(x)
-        back = model.backward(np.array(1.))
+        back = model.backward(np.ones(2))
 
     def test_Reduce(self):
         model = Seq([
@@ -396,15 +446,16 @@ class TestNumericGradientAllLayers(unittest.TestCase):
         # Find all classes in layers.py
         all_layers = inspect.getmembers(sys.modules['layers'], inspect.isclass)
         excluded = ['Layer', 'Print', 'Store', 'Const', 'Linear', 'RegularizedLinear', 'Wx', 'Dropout', 'Sign',
-                    'Softmax', 'ClaMax', 'Concat', 'Sum']
+                    'Softmax', 'ClaMax', 'Concat', 'Sum', 'PlusBias', 'WxBiasLinear', 'Seq', 'SyntaxLayer',
+                    'MatrixWeight', 'VectorWeight']
 
         x = np.random.rand(3)
         for class_name, layer_class in all_layers:
             if class_name in excluded:
                 continue
 
+            print class_name
             layer = layer_class()
-            # print(class_name)
 
             y = layer.forward(x)
             grad = layer.backward(np.array(1))
@@ -439,7 +490,7 @@ class ParallelTest(unittest.TestCase):
             Par(Const(1.), Const(2.), Const(3.)),
             Sum
         )
-        y = model.forward(np.array([1.]))
+        y = model.forward(np.zeros(3))
         assert_array_equal(y, 6.)
 
     def test_MulLayer(self):
@@ -451,76 +502,76 @@ class ParallelTest(unittest.TestCase):
         y = model.forward(np.array([1.]))
         assert_array_equal(y, 24.)
 
-
-class NetworkTests(unittest.TestCase):
-    def test_map_forward(self):
-        # [a, b] => [a, b]
-        model = Map(Identity, Identity)
-        a = np.array([2.])
-        b = np.array([3.])
-        y = model.forward(np.array([a, b]))
-        assert_array_equal(y, np.array([[2.], [3.]]))
-
-    def test_par_forward(self):
-        # x => [x, x]
-        model = Par(Identity, Identity)
-        a = np.array([5, 1])
-        b = np.array([6, 1])
-        x = np.array([a, b])
-        y = model.forward(x)
-        assert_array_equal(y, np.array([x, x]))
-        assert_array_equal(model.backward(1.), np.array([1, 1]))
-
-    def test_map_sum_forward_backward(self):
-        # [a, b] => a+b
-        model = Seq(Map(Identity, Identity), Sum)
-        a = np.array([2, 1])
-        b = np.array([3, 1])
-        y = model.forward(np.array([a, b]))
-        assert_array_equal(y, np.array([5, 2]))
-        grad = model.backward(np.array([1]))
-        assert_almost_equal(grad, np.array([1, 1]))
-
-    def test_map_mul_forward(self):
-        # [a, b] => a*b
-        model = Seq(Map(Identity, Identity), Mul)
-        a = np.array([2., 1])
-        b = np.array([3., 1])
-        x = np.array([a, b])
-        y = model.forward(x)
-        assert_array_equal(y, np.array([6., 1.]))
-        grad = model.backward(np.array([1.]))
-        assert_array_equal(grad, np.array(b, a))
-
-    def test_map_mul_backward(self):
-        model = Seq(Map(Identity, Identity), Mul)
-        a = np.array([2, 1])
-        b = np.array([3, 1])
-        x = np.array([a, b])
-        y = model.forward(x)
-        grad = model.backward(np.ones(1))
-        # grad = np.array([b, a])
-        num_grad = numerical_gradient.calc(model.forward, x)
-        assert_almost_equal(grad, num_grad)
-
-
-# class VanillaRNNTests(unittest.TestCase):
-#     def test_forward(self):
-#         model = VanillaRNN(3)
-#         for i in range(3):
-#             x = np.random.rand(3)
-#             model.forward(x)
-#             last_h = model.h_store.read()
+# class NetworkTests(unittest.TestCase):
+#     def test_map_forward(self):
+#         # [a, b] => [a, b]
+#         model = Map(Identity, Identity)
+#         a = np.array([2.])
+#         b = np.array([3.])
+#         y = model.forward(np.array([a, b]))
+#         assert_array_equal(y, np.array([[2.], [3.]]))
 #
-#     def test_backward(self):
-#         x = np.random.rand(3)
+#     def test_par_forward(self):
+#         # x => [x, x]
+#         model = Par(Identity, Identity)
+#         a = np.array([5, 1])
+#         b = np.array([6, 1])
+#         x = np.array([a, b])
+#         y = model.forward(x)
+#         assert_array_equal(y, np.array([x, x]))
+#         assert_array_equal(model.backward(1.), np.array([1, 1]))
 #
-#         model = VanillaRNN(3)
-#         model.forward(x)
-#         dJdy = np.ones(3)
-#         grad = model.backward(dJdy)
+#     def test_map_sum_forward_backward(self):
+#         # [a, b] => a+b
+#         model = Seq(Map(Identity, Identity), Sum)
+#         a = np.array([2, 1])
+#         b = np.array([3, 1])
+#         y = model.forward(np.array([a, b]))
+#         assert_array_equal(y, np.array([5, 2]))
+#         grad = model.backward(np.array([1]))
+#         assert_almost_equal(grad, np.array([1, 1]))
 #
-#         num_model = VanillaRNN(3)
-#         num_grad = numerical_gradient.calc(num_model.forward, x)
+#     def test_map_mul_forward(self):
+#         # [a, b] => a*b
+#         model = Seq(Map(Identity, Identity), Mul)
+#         a = np.array([2., 1])
+#         b = np.array([3., 1])
+#         x = np.array([a, b])
+#         y = model.forward(x)
+#         assert_array_equal(y, np.array([6., 1.]))
+#         grad = model.backward(np.array([1.]))
+#         assert_array_equal(grad, np.array(b, a))
 #
+#     def test_map_mul_backward(self):
+#         model = Seq(Map(Identity, Identity), Mul)
+#         a = np.array([2, 1])
+#         b = np.array([3, 1])
+#         x = np.array([a, b])
+#         y = model.forward(x)
+#         grad = model.backward(np.ones(1))
+#         # grad = np.array([b, a])
+#         num_grad = numerical_gradient.calc(model.forward, x)
 #         assert_almost_equal(grad, num_grad)
+
+
+# class PythonTest(unittest.TestCase):
+#     def test_come_funziona_python(self):
+#
+#         class X:
+#             def __init__(self, W):
+#                 self.W = W
+#                 self.W = np.zeros(10)
+#
+#         W = np.ones(10)
+#         x = X(W)
+#         W += 10
+#         assert_array_equal(x.W, W)
+#
+#         print(W, x.W)
+
+
+class NumpyTest(unittest.TestCase):
+    def test_come_funziona_sum(self):
+        a = np.array([0.01277411, 0.01703821])
+        b = np.array([[0.0018332], [0.00052467]])
+        a+b
