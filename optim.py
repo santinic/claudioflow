@@ -29,14 +29,13 @@ class MomentumSGD:
 class AdaGrad:
     def __init__(self, learning_rate):
         self.learning_rate = learning_rate
-        self.delta_const = 10 ** -7
+        self.delta_const = 1e-8
 
     def update(self, layer, grad):
         if not hasattr(layer, 'r'):
             layer.r = np.zeros(grad.shape)
-        layer.r += np.multiply(grad, grad)
-        left = - self.learning_rate / (self.delta_const + np.sqrt(layer.r))
-        layer.W += np.multiply(left, grad)
+        layer.r += grad * grad
+        layer.W += - (self.learning_rate * grad) / np.sqrt(self.delta_const + layer.r)
 
 
 class RMSProp:

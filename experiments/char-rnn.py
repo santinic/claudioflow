@@ -41,23 +41,23 @@ def sample(rnn, seed_ix, n):
     return ixes
 
 
-def sample_and_print(rnn, seed_ix, mean_loss, n=40):
+def sample_and_print(rnn, seed_ix, mean_loss, n=100):
     sample_ix = sample(rnn, seed_ix, n)
     txt = ''.join(ix_to_char[ix] for ix in sample_ix)
     print '----\n %s \n----' % (txt,)
     print 'loss %f' % mean_loss
 
 
-hidden_size = 100
-seq_length = 25
-rnn = VanillaRNN(seq_length, vocab_size, hidden_size)
+hidden_size = 100  # size of hidden layer of neurons
+seq_length = 25  # number of steps to unroll the RNN for
+
+rnn = VanillaRNN(seq_length, vocab_size, hidden_size, scale=0.01)
 loss = CrossEntropyLoss()
-optimizer = SGD(learning_rate=0.01)
-# optimizer = AdaGrad(learning_rate=0.01)
+# optimizer = SGD(learning_rate=0.01)
+optimizer = AdaGrad(learning_rate=0.01)
 
 W_names = ["Wxh", "Whh", 'Why', 'delta_Wxh', 'delta_Whh', 'delta_Why']
 plot_matrix_magnitudes = defaultdict(list)
-
 
 def magnitude(W):
     return np.sum(np.abs(W)) / np.sum(np.abs(W.shape))
@@ -93,25 +93,19 @@ for _ in xrange(1000):
 
         inputs_one_hot = [one_hots[x] for x in inputs]
         targets_one_hot = [one_hots[t] for t in targets]
-
         window = zip(inputs_one_hot, targets_one_hot)
-
-        ys, dJdys, mean_loss = rnn.forward_window(window, loss)
-
-        dhnext = np.zeros(hidden_size)
-        for node, (x, target), dJdy in reversed(zip(rnn.nodes, window, dJdys)):
-            dhnext = node.backward_through_time(dJdy, dhnext)
+        mean_loss = rnn.learn_window(window, loss, optimizer)
 
         append_plot_magnitudes(rnn)
 
         rnn.clip()
         rnn.update_weights(optimizer)
 
-        if iter % 100 == 0:
+        if iter % 500 == 0:
             sample_and_print(rnn, inputs[0], mean_loss)
 
         iter += 1
+
     rnn.reset_h()
-    print('############################################################################')
 
 show_plots()

@@ -106,6 +106,13 @@ class MinibatchTrainer:
     train = train_minibatches
 
 
+# class RNNTrainer:
+#     def train(self, rnn, seq_length, otimizer):
+        # rnn.
+
+
+
+
 class PatienceTrainer(MinibatchTrainer):
     """This multibatch trainer uses a validation set and a patience variable to decide when to stop.
     Inspired by this Theano tutorial: http://deeplearning.net/tutorial/mlp.html

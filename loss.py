@@ -31,13 +31,13 @@ class CrossEntropyLoss:
     def calc_loss(self, x, one_hot_target):
         c = np.max(x)
         exp_x = np.exp(x - c)
-        self.y = np.divide(exp_x, np.sum(exp_x))
+        self.p = np.divide(exp_x, np.sum(exp_x))
 
-        J = - one_hot_target * np.log(self.y)
+        J = - one_hot_target * np.log(self.p)
         return J
 
     def calc_gradient(self, y, one_hot_target):
-        return self.y - one_hot_target
+        return (self.p - one_hot_target)
 
     @staticmethod
     def test_score(model, test_set):
