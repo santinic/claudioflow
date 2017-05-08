@@ -299,3 +299,4 @@ class SyntaxTest(unittest.TestCase):
         assert_array_equal(grads['b'], dval)
         assert_array_equal(grads['c'], aval)
         assert_array_equal(grads['d'], bval)
+

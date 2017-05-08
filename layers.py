@@ -10,18 +10,22 @@ class Linear(object):
         self.dtype = dtype
         self.first_x_already_checked = False
 
-        self.delta_W = np.zeros([out_size, in_size + 1], dtype=dtype)
+        # self.delta_W = np.zeros([out_size, in_size + 1], dtype=dtype)
 
-        if type(initialize) is not str:
+        if isinstance(initialize, str):
+            self.W = MatrixWeight(in_size, out_size, initialize)
+        elif isinstance(initialize, MatrixWeight):
             self.W = initialize
-        elif initialize == 'random':
-            self.W = np.random.rand(out_size, in_size + 1).astype(dtype)
-        elif initialize == 'randn':
-            self.W = np.random.randn(out_size, in_size + 1)
-        elif initialize == 'ones':
-            self.W = np.ones([out_size, in_size + 1], dtype=dtype)
-        elif initialize == 'zeros':
-            self.W = np.zeros([out_size, in_size + 1], dtype=dtype)
+        # if type(initialize) is not str:
+        #     self.W = initialize
+        # elif initialize == 'random':
+        #     self.W = np.random.rand(out_size, in_size + 1).astype(dtype)
+        # elif initialize == 'randn':
+        #     self.W = np.random.randn(out_size, in_size + 1)
+        # elif initialize == 'ones':
+        #     self.W = np.ones([out_size, in_size + 1], dtype=dtype)
+        # elif initialize == 'zeros':
+        #     self.W = np.zeros([out_size, in_size + 1], dtype=dtype)
         else:
             raise Exception("Unrecognized initialization value")
 
@@ -29,12 +33,12 @@ class Linear(object):
         self.check_first_x_dtype(x)
         x = np.hstack([1., x])
         self.x = x
-        y = self.W.dot(x)
+        y = self.W.get().dot(x)
         return y
 
     def backward(self, dJdy):
-        self.delta_W += self.calc_update_gradient(dJdy)
-        weights_without_bias = self.W[:, 1:]
+        self.W.delta += self.calc_update_gradient(dJdy)
+        weights_without_bias = self.W.get()[:, 1:]
         return weights_without_bias.T.dot(dJdy)
 
     def calc_update_gradient(self, dJdy):
@@ -42,10 +46,8 @@ class Linear(object):
         return grad
 
     def update_weights(self, optimizer):
-        optimizer.update(self, self.delta_W)
-        # reset delta_W
-        # self.delta_W = np.zeros(self.W.shape)
-        self.delta_W.fill(0.)
+        optimizer.update(self.W, self.W.delta)
+        self.W.delta.fill(0.)
 
     def check_first_x_dtype(self, x):
         if self.first_x_already_checked:
@@ -72,20 +74,19 @@ class RegularizedLinear(Linear):
 
 
 class MatrixWeight:
-    def __init__(self, in_size=None, out_size=None, initialize=None):
+    def __init__(self, in_size=None, out_size=None, initialize=None, scale=1):
         assert type(initialize) == str or type(initialize) == np.ndarray or \
                type(initialize) == np.matrixlib.defmatrix.matrix, \
             "%s" % type(initialize)
 
-
         if type(initialize) is not str:
             self.W = initialize
         elif initialize == 'random':
-            self.W = np.random.rand(out_size, in_size)
+            self.W = np.random.rand(out_size, in_size) * scale
         elif initialize == 'randn':
-            self.W = np.random.randn(out_size, in_size)
+            self.W = np.random.randn(out_size, in_size) * scale
         elif initialize == 'ones':
-            self.W = np.ones([out_size, in_size])
+            self.W = np.ones([out_size, in_size]) * scale
         elif initialize == 'zeros':
             self.W = np.zeros([out_size, in_size])
         else:
@@ -126,17 +127,17 @@ class Wx(Linear):
 
 
 class VectorWeight:
-    def __init__(self, in_size, initialize):
+    def __init__(self, in_size, initialize, scale=1):
         assert type(in_size) == int
 
         if type(initialize) is not str:
             self.W = initialize
         elif initialize == 'random':
-            self.W = np.random.rand(in_size)
+            self.W = np.random.rand(in_size) * scale
         elif initialize == 'randn':
-            self.W = np.random.randn(in_size)
+            self.W = np.random.randn(in_size) * scale
         elif initialize == 'ones':
-            self.W = np.ones(in_size)
+            self.W = np.ones(in_size) * scale
         elif initialize == 'zeros':
             self.W = np.zeros(in_size)
         else:
@@ -303,8 +304,10 @@ class Dropout(Layer):
 
     def backward(self, dJdy):
         ret = dJdy * self.binomial
-        self.binomial = None
         return ret
+
+    def update_weights(self, optimizer):
+        self.binomial = None
 
 
 class ClaMax(Layer):
@@ -326,12 +329,12 @@ class Sum(Layer):
 
     def forward(self, xs, is_training=False):
         self.elements = xs.shape[0]
-        self.vector_size = xs.shape[1]
+        # self.vector_size = xs.shape[1]
         y = np.sum(xs, axis=0)
         return y
 
     def backward(self, dJdy):
-        assert dJdy.shape[0] == self.vector_size, "backward dJdy size is not compatible with previous x vector size"
+        # assert dJdy.shape[0] == self.vector_size, "backward dJdy size is not compatible with previous x vector size"
         return [dJdy] * self.elements
 
 
@@ -389,7 +392,7 @@ class Store(Layer):
 
 
 class Concat(Layer):
-    def forward(self, values):
+    def forward(self, values, is_training=False):
         self.sizes = map(len, values)
         return np.hstack(values)
 

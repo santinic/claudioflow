@@ -1,4 +1,5 @@
 import inspect
+from collections import deque
 
 import numpy as np
 import cPickle as pickle
@@ -66,6 +67,27 @@ class Seq(Layer, WithLayers, Serializable):
     def validate_input_data(self, x):
         if type(x) == list:
             raise Exception("Input shouldn't be a Python list, but a numpy.ndarray.")
+
+
+# TODO: this could be a good / very-bad idea
+class MemoizeForward(Seq):
+    def __init__(self, max_memory_size=10, *args):
+        self.max_memory_size = max_memory_size
+        self.memory = {}
+        self.queue = deque([], max_memory_size)
+        Seq.__init__(self, *args)
+
+    def forward(self, x, is_training=False):
+        if id(x) in self.memory:
+            return self.memory
+        else:
+            if len(self.queue) == self.max_memory_size:
+                id_to_remove = self.queue.pop()
+                del self.memory[id_to_remove]
+
+            y = Seq.forward(self, x, is_training)
+            self.memory[id(x)] = y
+            return y
 
 
 class Par(Layer, WithLayers, Serializable):

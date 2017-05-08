@@ -2,35 +2,9 @@ import numpy as np
 
 import syntax
 from layers import MatrixWeight, VectorWeight
+from rnn import RNN
 from shared import SharedMemory
 from syntax import Var, Tanh
-
-
-class RNN:
-    def forward_window(self, window, loss):
-        loss_sum = 0.
-        dJdys = []
-        ys = []
-        for node, (x, target) in zip(self.nodes, window):
-            y = node.forward(x, is_training=True)
-            J = loss.calc_loss(y, target)
-            dJdy = loss.calc_gradient(y, target)
-            dJdys.append(dJdy)
-            loss_sum += np.sum(J)
-        mean_loss = loss_sum / float(len(window))
-        return ys, dJdys, mean_loss
-
-    def backward_window(self, dJdys):
-        dhnext = np.zeros_like(self.hidden_size)
-        for node, dJdy in reversed(zip(self.nodes, dJdys)):
-            dhnext = node.backward_through_time(dJdy, dhnext)
-
-    def learn_window(self, window, loss, optimizer):
-        rnn = self
-        ys, dJdys, mean_loss = rnn.forward_window(window, loss)
-        rnn.backward_window(dJdys)
-        rnn.update_weights(optimizer)
-        return mean_loss
 
 
 class VanillaRNN(RNN):
@@ -48,7 +22,7 @@ class VanillaRNN(RNN):
         self.by = VectorWeight(hidden_size, _by)
 
         self.hidden_size = hidden_size
-        self.weights = [self.Wx, self.Wh, self.Wy, self.by]
+        # self.weights = [self.Wx, self.Wh, self.Wy, self.by]
         self.last_h = SharedMemory(np.zeros(hidden_size))
 
         self.nodes = []
@@ -57,15 +31,13 @@ class VanillaRNN(RNN):
             node = VanillaNode(self.last_h, in_size, hidden_size, self.Wx, self.Wh, self.Wy, self.by)
             self.nodes.append(node)
 
-    def update_weights(self, optimizer):
-        # print('update weights')
-        self.nodes[0].update_weights(optimizer)
+    def get_weights(self):
+        return ['Wx', 'Wh', 'Wy', 'by']
 
-    def reset_h(self):
+    def reset_memory(self):
         self.last_h.get().fill(0.)
 
     def clip(self):
-        """Prevent exploding gradients"""
         for W in [self.Wx, self.Wh, self.Wy, self.by]:
             np.clip(W.delta, -5, 5, out=W.delta)
 

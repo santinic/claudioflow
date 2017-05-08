@@ -78,8 +78,8 @@ class SyntaxOp:
                     merged[k] = np.copy(v)
         return merged
 
-    def layer_forward(self, values):
-        return self.layer.forward(values)
+    def layer_forward(self, values, is_training=True):
+        return self.layer.forward(values, is_training)
 
     def layer_backward(self, dJdy):
         return self.layer.backward(dJdy)
@@ -108,7 +108,7 @@ class Var(SyntaxOp):
         return values
 
     # def layer_backward(self, dJdy):
-    #     return dJdy
+    #     this should never be called
 
     def layer_update_weights(self, optimizer):
         return
@@ -141,6 +141,12 @@ class PlusBias(SyntaxOp):
         self.layer = layers.PlusBias(in_size, initialize)
 
 
+class Dropout(SyntaxOp):
+    def __init__(self, p, input=None):
+        SyntaxOp.__init__(self, input)
+        self.layer = layers.Dropout(p)
+
+
 class Tanh(SyntaxOp):
     def __init__(self, *args):
         self.layer = layers.Tanh()
@@ -164,10 +170,12 @@ class Sum(SyntaxOp):
         self.layer = layers.Sum()
         self.inputs = args
 
+
 class Neg(SyntaxOp):
     def __init__(self, *args):
         self.layer = layers.Neg()
         self.inputs = args
+
 
 class Mul(SyntaxOp):
     def __init__(self, *args):
